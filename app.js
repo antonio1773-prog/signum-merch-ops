@@ -15,6 +15,7 @@ const defaultUsers = [
   { id: "planeamiento", name: "Planeamiento Comercial", username: "planeamiento", password: "1234", role: "planeamiento", active: true },
   { id: "taller", name: "Taller Propio", username: "taller", password: "1234", role: "taller", active: true },
   { id: "fabrica", name: "Fabrica", username: "fabrica", password: "1234", role: "fabrica", active: true },
+  { id: "logistica", name: "Logistica", username: "logistica", password: "1234", role: "logistica", active: true },
   { id: "direccion", name: "Direccion", username: "direccion", password: "admin", role: "direccion", active: true }
 ];
 
@@ -107,6 +108,7 @@ const roleLabels = {
   planeamiento: "Planeamiento comercial",
   taller: "Taller propio",
   fabrica: "Fabrica",
+  logistica: "Logistica",
   direccion: "Direccion"
 };
 
@@ -139,7 +141,8 @@ const statusLabels = {
   fabrica_fecha_planeamiento: "Planeamiento define fecha",
   fecha_confirmada: "Fecha confirmada",
   produccion: "En produccion",
-  listo: "Listo",
+  logistica: "En logistica",
+  entregado: "Entregado",
   rechazado: "Rechazado"
 };
 
@@ -153,7 +156,8 @@ const statusOptions = [
   ["fabrica_fecha_planeamiento", "Planeamiento define fecha"],
   ["fecha_confirmada", "Fecha confirmada"],
   ["produccion", "En produccion"],
-  ["listo", "Listo"],
+  ["logistica", "En logistica"],
+  ["entregado", "Entregado"],
   ["rechazado", "Rechazado"]
 ];
 
@@ -166,7 +170,12 @@ function loadState() {
   if (!stored) return structuredClone(seedState);
   try {
     const parsed = JSON.parse(stored);
-    parsed.users ||= structuredClone(defaultUsers);
+    parsed.users ||= [];
+    defaultUsers.forEach((defaultUser) => {
+      if (!parsed.users.some((user) => user.id === defaultUser.id || user.username === defaultUser.username)) {
+        parsed.users.push(structuredClone(defaultUser));
+      }
+    });
     parsed.clients ||= [];
     parsed.orders = parsed.orders.map((order) => ({
       clientPhone: "",
@@ -381,8 +390,9 @@ function canEditPlanning() {
 function visibleOrders(scope = "list") {
   const user = currentUser();
   if (user.role === "vendedor") return state.orders.filter((order) => order.sellerId === user.id);
-  if (user.role === "taller") return state.orders.filter((order) => order.source === "taller" && ["taller_fecha", "fecha_confirmada", "produccion", "listo"].includes(order.status));
-  if (user.role === "fabrica") return state.orders.filter((order) => order.source === "fabrica" && order.payment50);
+  if (user.role === "taller") return state.orders.filter((order) => order.source === "taller" && ["taller_fecha", "fecha_confirmada", "produccion", "logistica", "entregado"].includes(order.status));
+  if (user.role === "fabrica") return state.orders.filter((order) => order.source === "fabrica" && order.payment50 && ["fabrica_fecha_planeamiento", "fecha_confirmada", "produccion", "logistica", "entregado"].includes(order.status));
+  if (user.role === "logistica") return state.orders.filter((order) => ["logistica", "entregado"].includes(order.status));
   if (scope === "agenda") return state.orders.filter((order) => order.committedDate);
   return state.orders;
 }
@@ -529,13 +539,17 @@ function renderOrders() {
 
 function renderWorkflow() {
   const user = currentUser();
-  $("#workflowTitle").textContent = user.role === "taller" ? "Pedidos para taller" : user.role === "fabrica" ? "Pedidos para fabrica" : "Gestion de pedidos";
+  $("#workflowTitle").textContent = user.role === "taller" ? "Pedidos para taller" : user.role === "fabrica" ? "Pedidos para fabrica" : user.role === "logistica" ? "Logistica" : "Gestion de pedidos";
   $("#workflowCopy").textContent =
     user.role === "planeamiento"
       ? "Planeamiento aprueba, deriva, confirma sena y responde fechas de fabrica."
       : user.role === "taller"
         ? "Taller asigna fecha solo cuando el pago del 50% ya esta confirmado."
-        : "Vista operativa con permisos de seguimiento y modificacion.";
+        : user.role === "fabrica"
+          ? "Fabrica ve pedidos con sena confirmada y avanza produccion."
+          : user.role === "logistica"
+            ? "Logistica recibe pedidos terminados y marca la entrega al cliente."
+            : "Vista operativa con permisos de seguimiento y modificacion.";
   const filtered = filteredOrders(visibleOrders(), "#workflowSearch", "#workflowFilter");
   $("#workflowList").innerHTML = orderListTemplate(filtered, "workflow");
   attachOrderActions();
@@ -580,7 +594,7 @@ function orderTemplate(order, mode) {
 
 function badgeClass(status) {
   if (status === "rechazado") return "rechazado";
-  if (["fecha_confirmada", "produccion", "listo", "presupuesto_respondido"].includes(status)) return "aprobado";
+  if (["fecha_confirmada", "produccion", "logistica", "entregado", "presupuesto_respondido"].includes(status)) return "aprobado";
   if (status === "esperando_senia") return "payment";
   return "enviado";
 }
@@ -603,8 +617,11 @@ function actionButtons(order, mode) {
     return `<button class="small-button" type="button" data-date="${order.id}">Asignar fecha taller</button>`;
   }
   if (["taller", "fabrica", "direccion"].includes(role) && ["fecha_confirmada", "produccion"].includes(order.status)) {
-    const nextStatus = order.status === "fecha_confirmada" ? "produccion" : "listo";
-    return `<button class="small-button" type="button" data-progress="${order.id}" data-next-status="${nextStatus}">${nextStatus === "produccion" ? "Pasar a produccion" : "Marcar listo"}</button>`;
+    const nextStatus = order.status === "fecha_confirmada" ? "produccion" : "logistica";
+    return `<button class="small-button" type="button" data-progress="${order.id}" data-next-status="${nextStatus}">${nextStatus === "produccion" ? "Pasar a produccion" : "Enviar a logistica"}</button>`;
+  }
+  if (["logistica", "direccion"].includes(role) && order.status === "logistica") {
+    return `<button class="small-button" type="button" data-deliver="${order.id}">Marcar entregado</button>`;
   }
   return "";
 }
@@ -614,11 +631,19 @@ function attachOrderActions() {
   $$("[data-pay]").forEach((button) => button.addEventListener("click", () => confirmPayment(button.dataset.pay)));
   $$("[data-date]").forEach((button) => button.addEventListener("click", () => openDate(button.dataset.date)));
   $$("[data-convert]").forEach((button) => button.addEventListener("click", () => convertQuote(button.dataset.convert)));
+  $$("[data-deliver]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const order = state.orders.find((item) => item.id === button.dataset.deliver);
+      order.status = "entregado";
+      order.comment = "Pedido entregado al cliente por logistica.";
+      saveState();
+    });
+  });
   $$("[data-progress]").forEach((button) => {
     button.addEventListener("click", () => {
       const order = state.orders.find((item) => item.id === button.dataset.progress);
       order.status = button.dataset.nextStatus;
-      order.comment = order.status === "produccion" ? "Produccion iniciada." : "Pedido listo para entregar.";
+      order.comment = order.status === "produccion" ? "Produccion iniciada." : "Pedido terminado. Logistica debe coordinar la entrega.";
       saveState();
     });
   });
@@ -656,8 +681,8 @@ function renderCalendar() {
 function renderMetrics() {
   const orders = visibleOrders();
   const totalUnits = orders.reduce((sum, order) => sum + Number(order.quantity), 0);
-  const pending = orders.filter((order) => !["fecha_confirmada", "produccion", "listo", "rechazado"].includes(order.status)).length;
-  const approved = orders.filter((order) => ["fecha_confirmada", "produccion", "listo"].includes(order.status)).length;
+  const pending = orders.filter((order) => !["fecha_confirmada", "produccion", "logistica", "entregado", "rechazado"].includes(order.status)).length;
+  const approved = orders.filter((order) => ["fecha_confirmada", "produccion", "logistica", "entregado"].includes(order.status)).length;
   $("#metrics").innerHTML = [
     ["Pedidos visibles", orders.length],
     ["Pendientes", pending],
