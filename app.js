@@ -162,6 +162,12 @@ const statusOptions = [
 ];
 
 const channel = "BroadcastChannel" in window ? new BroadcastChannel("signum-merch") : null;
+const supabaseSettings = window.SIGNUM_SUPABASE || {};
+const hasRemoteStore = Boolean(supabaseSettings.url && supabaseSettings.anonKey && window.supabase);
+const remoteStateId = supabaseSettings.stateId || "signum-merch-ops";
+const supabaseClient = hasRemoteStore ? window.supabase.createClient(supabaseSettings.url, supabaseSettings.anonKey) : null;
+let remoteReady = false;
+let remoteSaveTimer = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -169,31 +175,114 @@ function loadState() {
   const stored = localStorage.getItem(storeKey);
   if (!stored) return structuredClone(seedState);
   try {
-    const parsed = JSON.parse(stored);
-    parsed.users ||= [];
-    defaultUsers.forEach((defaultUser) => {
-      if (!parsed.users.some((user) => user.id === defaultUser.id || user.username === defaultUser.username)) {
-        parsed.users.push(structuredClone(defaultUser));
-      }
-    });
-    parsed.clients ||= [];
-    parsed.orders = parsed.orders.map((order) => ({
-      clientPhone: "",
-      clientEmail: "",
-      referenceImage: "",
-      ...order,
-      status: order.status === "listo" ? "logistica" : order.status
-    }));
-    return parsed;
+    return normalizeState(JSON.parse(stored));
   } catch {
     return structuredClone(seedState);
   }
 }
 
+function normalizeState(rawState) {
+  const parsed = rawState || {};
+  parsed.users ||= [];
+  defaultUsers.forEach((defaultUser) => {
+    if (!parsed.users.some((user) => user.id === defaultUser.id || user.username === defaultUser.username)) {
+      parsed.users.push(structuredClone(defaultUser));
+    }
+  });
+  parsed.clients ||= [];
+  parsed.products ||= structuredClone(seedState.products);
+  parsed.dynamics ||= structuredClone(seedState.dynamics);
+  parsed.orders ||= [];
+  parsed.orders = parsed.orders.map((order) => ({
+    clientPhone: "",
+    clientEmail: "",
+    referenceImage: "",
+    ...order,
+    status: order.status === "listo" ? "logistica" : order.status
+  }));
+  return parsed;
+}
+
 function saveState() {
   localStorage.setItem(storeKey, JSON.stringify(state));
+  queueRemoteSave();
   channel?.postMessage({ type: "state-change" });
   render();
+}
+
+function queueRemoteSave() {
+  if (!supabaseClient) return;
+  window.clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = window.setTimeout(saveRemoteState, 220);
+}
+
+async function saveRemoteState() {
+  if (!supabaseClient) return;
+  try {
+    const { error } = await supabaseClient.from("app_state").upsert({
+      id: remoteStateId,
+      data: state,
+      updated_at: new Date().toISOString()
+    });
+    if (error) throw error;
+    remoteReady = true;
+    renderSyncStatus();
+  } catch {
+    remoteReady = false;
+    renderSyncStatus("No se pudo guardar en la nube.");
+  }
+}
+
+async function initializeRemoteState() {
+  renderSyncStatus();
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.from("app_state").select("data").eq("id", remoteStateId).maybeSingle();
+    if (error) throw error;
+    if (data?.data) {
+      state = normalizeState(data.data);
+      localStorage.setItem(storeKey, JSON.stringify(state));
+    } else {
+      const { error: insertError } = await supabaseClient.from("app_state").insert({ id: remoteStateId, data: state });
+      if (insertError) throw insertError;
+    }
+    remoteReady = true;
+    renderSyncStatus();
+    render();
+    subscribeRemoteState();
+  } catch {
+    remoteReady = false;
+    renderSyncStatus("Configura Supabase para activar varios dispositivos.");
+  }
+}
+
+function subscribeRemoteState() {
+  if (!supabaseClient) return;
+  supabaseClient
+    .channel("signum-merch-ops-state")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "app_state", filter: `id=eq.${remoteStateId}` },
+      (payload) => {
+        if (!payload.new?.data) return;
+        state = normalizeState(payload.new.data);
+        localStorage.setItem(storeKey, JSON.stringify(state));
+        remoteReady = true;
+        renderSyncStatus();
+        render();
+      }
+    )
+    .subscribe();
+}
+
+function renderSyncStatus(extraCopy = "") {
+  if (!$("#syncTitle")) return;
+  $("#syncTitle").textContent = supabaseClient && remoteReady ? "Datos en vivo" : "Datos locales";
+  $("#syncCopy").textContent =
+    supabaseClient && remoteReady
+      ? "Los cambios se comparten entre celulares y computadoras."
+      : extraCopy || "Falta configurar Supabase para sincronizar dispositivos.";
+  $("#syncCard")?.classList.toggle("is-remote", Boolean(supabaseClient && remoteReady));
 }
 
 function currentUser() {
@@ -282,6 +371,7 @@ function setup() {
   $("#orderForm input[name='requestedDate']").value = iso(7);
   $("#dynamicForm input[name='expires']").value = iso(1);
   render();
+  initializeRemoteState();
 }
 
 function login(event) {

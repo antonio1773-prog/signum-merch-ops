@@ -207,6 +207,10 @@ select:disabled {
   line-height: 1.4;
 }
 
+.sync-card.is-remote {
+  border-color: rgba(53, 184, 107, 0.42);
+}
+
 .pulse {
   width: 10px;
   height: 10px;
