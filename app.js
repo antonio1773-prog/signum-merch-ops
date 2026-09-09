@@ -283,12 +283,32 @@ function subscribeRemoteState() {
 
 function renderSyncStatus(extraCopy = "") {
   if (!$("#syncTitle")) return;
-  $("#syncTitle").textContent = supabaseClient && remoteReady ? "Datos en vivo" : "Datos locales";
-  $("#syncCopy").textContent =
-    supabaseClient && remoteReady
-      ? "Los cambios se comparten entre celulares y computadoras."
-      : extraCopy || "Falta configurar Supabase para sincronizar dispositivos.";
-  $("#syncCard")?.classList.toggle("is-remote", Boolean(supabaseClient && remoteReady));
+  const mode = supabaseClient && remoteReady ? "remote" : supabaseClient ? "offline" : "local";
+  const copyByMode = {
+    remote: "Los cambios se comparten entre celulares y computadoras.",
+    local: "Los cambios se reflejan solo en este dispositivo.",
+    offline: extraCopy || "No se pudo conectar con la base compartida."
+  };
+  const titleByMode = {
+    remote: "Datos en vivo",
+    local: "Datos locales",
+    offline: "Desconectado"
+  };
+  const topTitleByMode = {
+    remote: "Verde: datos compartidos entre dispositivos",
+    local: "Amarillo: datos solo en este dispositivo",
+    offline: "Rojo: desconectado"
+  };
+
+  $("#syncTitle").textContent = titleByMode[mode];
+  $("#syncCopy").textContent = copyByMode[mode];
+  $("#syncCard")?.classList.toggle("is-remote", mode === "remote");
+  $("#syncCard")?.classList.toggle("is-local", mode === "local");
+  $("#syncCard")?.classList.toggle("is-offline", mode === "offline");
+  $("#topSyncIndicator")?.classList.toggle("is-remote", mode === "remote");
+  $("#topSyncIndicator")?.classList.toggle("is-local", mode === "local");
+  $("#topSyncIndicator")?.classList.toggle("is-offline", mode === "offline");
+  $("#topSyncIndicator")?.setAttribute("title", topTitleByMode[mode]);
 }
 
 function currentUser() {
@@ -333,7 +353,6 @@ function setup() {
 
   $("#loginForm").addEventListener("submit", login);
   $("#logoutButton").addEventListener("click", logout);
-  $("#logoutTopButton").addEventListener("click", logout);
 
   $("#userSelect").addEventListener("change", (event) => {
     event.target.value = activeUserId;
@@ -342,12 +361,6 @@ function setup() {
   $("#sellerViewSelect").addEventListener("change", (event) => {
     activeView = event.target.value;
     render();
-  });
-
-  $("#seedButton").addEventListener("click", () => {
-    state = structuredClone(seedState);
-    renderLoginUsers();
-    saveState();
   });
 
   $("#clientInput").addEventListener("change", fillClientFromCrm);

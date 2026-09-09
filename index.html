@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-2" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-3" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -35,33 +35,40 @@
 
     <div class="app-shell is-hidden" id="appShell">
       <aside class="sidebar" aria-label="Accesos y navegacion">
-        <div class="brand">
-          <img class="brand-symbol" src="./signum-logo-icon-crop.png" alt="" />
-          <div>
-            <strong>SIGNUM</strong>
-            <span>Merch Ops</span>
+        <div class="brand-row">
+          <div class="brand">
+            <img class="brand-symbol" src="./signum-logo-icon-crop.png" alt="" />
+            <div>
+              <strong>SIGNUM</strong>
+              <span>Merch Ops</span>
+            </div>
           </div>
+
+          <details class="account-menu" id="accountMenu">
+            <summary aria-label="Abrir menu de usuario">Menu</summary>
+            <div class="account-panel">
+              <label class="field access-picker">
+                <span>Sesion</span>
+                <select id="userSelect"></select>
+              </label>
+
+              <label class="field seller-menu is-hidden" id="sellerMenuWrap">
+                <span>Vista</span>
+                <select id="sellerViewSelect">
+                  <option value="new-order">Cargar pedido</option>
+                  <option value="my-orders">Mis pedidos</option>
+                  <option value="planning">Planeamiento</option>
+                  <option value="capacity">Agenda</option>
+                  <option value="metrics">Indicadores</option>
+                </select>
+              </label>
+
+              <nav class="nav" id="navTabs" aria-label="Secciones"></nav>
+
+              <button class="ghost-button dark" id="logoutButton" type="button">Cerrar sesion</button>
+            </div>
+          </details>
         </div>
-
-        <label class="field access-picker">
-          <span>Sesion</span>
-          <select id="userSelect"></select>
-        </label>
-
-        <button class="ghost-button dark" id="logoutButton" type="button">Cerrar sesion</button>
-
-        <label class="field seller-menu is-hidden" id="sellerMenuWrap">
-          <span>Vista</span>
-          <select id="sellerViewSelect">
-            <option value="new-order">Cargar pedido</option>
-            <option value="my-orders">Mis pedidos</option>
-            <option value="planning">Planeamiento</option>
-            <option value="capacity">Agenda</option>
-            <option value="metrics">Indicadores</option>
-          </select>
-        </label>
-
-        <nav class="nav" id="navTabs" aria-label="Secciones"></nav>
 
         <div class="sync-card" id="syncCard">
           <span class="pulse"></span>
@@ -78,19 +85,14 @@
             <p class="eyebrow" id="roleEyebrow">Vendedor</p>
             <h1 id="pageTitle">Carga rapida de pedido</h1>
           </div>
-          <div class="top-actions">
-            <button class="ghost-button" id="seedButton" type="button">Restaurar demo</button>
-            <button class="danger-button" id="logoutTopButton" type="button">Cerrar sesion</button>
+          <div class="sync-indicator" id="topSyncIndicator" title="Datos locales">
+            <span id="topSyncLight"></span>
           </div>
         </header>
 
         <section class="view active" id="view-new-order" aria-label="Carga rapida">
           <form class="quick-form" id="orderForm">
-            <div class="form-head">
-              <div>
-                <h2>Nuevo pedido o presupuesto</h2>
-                <p>Entra primero a planeamiento comercial para revision y aprobacion.</p>
-              </div>
+            <div class="form-head single">
               <span class="badge neutral" id="sellerBadge">Vendedor</span>
             </div>
 
