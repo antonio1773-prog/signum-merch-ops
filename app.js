@@ -540,10 +540,11 @@ function renderOrders() {
 
 function renderWorkflow() {
   const user = currentUser();
+  const useMatrix = ["planeamiento", "direccion"].includes(user.role);
   $("#workflowTitle").textContent = user.role === "taller" ? "Pedidos para taller" : user.role === "fabrica" ? "Pedidos para fabrica" : user.role === "logistica" ? "Logistica" : "Gestion de pedidos";
   $("#workflowCopy").textContent =
     user.role === "planeamiento"
-      ? "Planeamiento aprueba, deriva, confirma sena y responde fechas de fabrica."
+      ? "Matriz operativa para aprobar, derivar, confirmar sena y responder fechas de fabrica."
       : user.role === "taller"
         ? "Taller asigna fecha solo cuando el pago del 50% ya esta confirmado."
         : user.role === "fabrica"
@@ -552,7 +553,8 @@ function renderWorkflow() {
             ? "Logistica recibe pedidos terminados y marca la entrega al cliente."
             : "Vista operativa con permisos de seguimiento y modificacion.";
   const filtered = filteredOrders(visibleOrders(), "#workflowSearch", "#workflowFilter");
-  $("#workflowList").innerHTML = orderListTemplate(filtered, "workflow");
+  $("#workflowList").classList.toggle("matrix-shell", useMatrix);
+  $("#workflowList").innerHTML = useMatrix ? orderMatrixTemplate(filtered) : orderListTemplate(filtered, "workflow");
   attachOrderActions();
 }
 
@@ -560,6 +562,61 @@ function orderListTemplate(orders, mode) {
   return orders.length
     ? orders.sort((a, b) => b.createdAt - a.createdAt).map((order) => orderTemplate(order, mode)).join("")
     : `<div class="empty-state panel">No hay pedidos para esta vista.</div>`;
+}
+
+function orderMatrixTemplate(orders) {
+  const rows = orders.sort((a, b) => b.createdAt - a.createdAt);
+  if (!rows.length) return `<div class="empty-state panel">No hay pedidos para esta vista.</div>`;
+  return `
+    <div class="matrix-table-wrap" role="region" aria-label="Matriz de pedidos" tabindex="0">
+      <table class="orders-matrix">
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Estado</th>
+            <th>Tipo</th>
+            <th>Vendedor</th>
+            <th>Cliente</th>
+            <th>Contacto</th>
+            <th>Producto</th>
+            <th>Cant.</th>
+            <th>Origen</th>
+            <th>Sena</th>
+            <th>Fecha ideal</th>
+            <th>Entrega</th>
+            <th>Notas</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((order) => matrixRowTemplate(order)).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function matrixRowTemplate(order) {
+  const contact = [order.clientPhone, order.clientEmail].filter(Boolean).join(" / ") || "Sin contacto";
+  const actions = actionButtons(order, "workflow");
+  return `
+    <tr>
+      <td><strong>${order.id}</strong></td>
+      <td><span class="badge ${badgeClass(order.status)}">${statusLabels[order.status]}</span></td>
+      <td>${order.requestType === "pedido" ? "Pedido" : "Presupuesto"}</td>
+      <td>${order.seller}</td>
+      <td>${order.client}</td>
+      <td>${contact}</td>
+      <td>${order.product}</td>
+      <td class="number-cell">${order.quantity}</td>
+      <td>${order.source === "taller" ? "Taller" : "Fabrica"}</td>
+      <td>${order.payment50 ? "Confirmada" : "Pendiente"}</td>
+      <td>${formatDate(order.requestedDate)}</td>
+      <td>${formatDate(order.committedDate)}</td>
+      <td class="notes-cell">${order.notes || order.comment || "-"}</td>
+      <td><div class="matrix-actions">${actions || `<span class="meta">Sin accion</span>`}</div></td>
+    </tr>
+  `;
 }
 
 function orderTemplate(order, mode) {
