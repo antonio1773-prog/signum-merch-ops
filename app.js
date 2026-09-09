@@ -181,7 +181,8 @@ function loadState() {
       clientPhone: "",
       clientEmail: "",
       referenceImage: "",
-      ...order
+      ...order,
+      status: order.status === "listo" ? "logistica" : order.status
     }));
     return parsed;
   } catch {
