@@ -508,7 +508,7 @@ h3 {
 
 .orders-matrix {
   width: 100%;
-  min-width: 1280px;
+  min-width: 1420px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -705,6 +705,11 @@ h3 {
 .small-button:hover {
   border-color: var(--purple-2);
   color: var(--purple-2);
+}
+
+.small-button.danger-inline {
+  border-color: rgba(228, 87, 79, 0.34);
+  color: #ff9b95;
 }
 
 .planning-grid,

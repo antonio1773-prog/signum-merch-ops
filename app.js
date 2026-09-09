@@ -43,6 +43,7 @@ const seedState = {
       client: "Norte Labs",
       clientPhone: "+54 11 4555-2010",
       clientEmail: "compras@nortelabs.com",
+      deliveryAddress: "Av. Corrientes 1520, CABA",
       product: "Kit bienvenida corporativo",
       quantity: 60,
       source: "taller",
@@ -63,6 +64,7 @@ const seedState = {
       client: "Grupo Marea",
       clientPhone: "+54 11 4890-7781",
       clientEmail: "marketing@grupomarea.com",
+      deliveryAddress: "Ruta Panamericana km 42, Pilar",
       product: "Gorra trucker personalizada",
       quantity: 120,
       source: "fabrica",
@@ -83,6 +85,7 @@ const seedState = {
       client: "Hotel Acacia",
       clientPhone: "+54 223 512-9044",
       clientEmail: "eventos@hotelacacia.com",
+      deliveryAddress: "Alberti 2140, Mar del Plata",
       product: "Remera premium bordada",
       quantity: 80,
       source: "taller",
@@ -143,6 +146,7 @@ const statusLabels = {
   produccion: "En produccion",
   logistica: "En logistica",
   entregado: "Entregado",
+  cancelado: "Cancelado por vendedor",
   rechazado: "Rechazado"
 };
 
@@ -158,6 +162,7 @@ const statusOptions = [
   ["produccion", "En produccion"],
   ["logistica", "En logistica"],
   ["entregado", "Entregado"],
+  ["cancelado", "Cancelados"],
   ["rechazado", "Rechazado"]
 ];
 
@@ -196,6 +201,7 @@ function normalizeState(rawState) {
   parsed.orders = parsed.orders.map((order) => ({
     clientPhone: "",
     clientEmail: "",
+    deliveryAddress: "",
     referenceImage: "",
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
@@ -668,6 +674,7 @@ function orderMatrixTemplate(orders) {
             <th>Vendedor</th>
             <th>Cliente</th>
             <th>Contacto</th>
+            <th>Direccion entrega</th>
             <th>Producto</th>
             <th>Cant.</th>
             <th>Origen</th>
@@ -697,6 +704,7 @@ function matrixRowTemplate(order) {
       <td>${order.seller}</td>
       <td>${order.client}</td>
       <td>${contact}</td>
+      <td>${order.deliveryAddress || "Sin direccion"}</td>
       <td>${order.product}</td>
       <td class="number-cell">${order.quantity}</td>
       <td>${order.source === "taller" ? "Taller" : "Fabrica"}</td>
@@ -731,6 +739,7 @@ function orderTemplate(order, mode) {
         <div class="meta-box"><span>Entrega</span><strong>${formatDate(order.committedDate)}</strong></div>
       </div>
       <p class="meta"><strong>Contacto:</strong> ${contact}</p>
+      <p class="meta"><strong>Direccion entrega:</strong> ${order.deliveryAddress || "Sin direccion cargada"}</p>
       ${order.referenceImage ? `<img class="reference-thumb" src="${order.referenceImage}" alt="Logo o referencia de ${order.client}" />` : ""}
       ${order.notes ? `<p class="meta">${order.notes}</p>` : ""}
       ${order.comment ? `<p class="meta"><strong>Comentario:</strong> ${order.comment}</p>` : ""}
@@ -741,7 +750,7 @@ function orderTemplate(order, mode) {
 }
 
 function badgeClass(status) {
-  if (status === "rechazado") return "rechazado";
+  if (["rechazado", "cancelado"].includes(status)) return "rechazado";
   if (["fecha_confirmada", "produccion", "logistica", "entregado", "presupuesto_respondido"].includes(status)) return "aprobado";
   if (status === "esperando_senia") return "payment";
   return "enviado";
@@ -749,6 +758,9 @@ function badgeClass(status) {
 
 function actionButtons(order, mode) {
   const role = currentUser().role;
+  if (role === "vendedor" && mode === "seller" && canSellerCancel(order)) {
+    return `<button class="small-button danger-inline" type="button" data-cancel-order="${order.id}">Cancelar pedido</button>`;
+  }
   if (mode !== "workflow" && role !== "direccion") return "";
   if (["planeamiento", "direccion"].includes(role)) {
     if (["pedido_planeamiento", "presupuesto_planeamiento"].includes(order.status)) {
@@ -769,9 +781,17 @@ function actionButtons(order, mode) {
     return `<button class="small-button" type="button" data-progress="${order.id}" data-next-status="${nextStatus}">${nextStatus === "produccion" ? "Pasar a produccion" : "Enviar a logistica"}</button>`;
   }
   if (["logistica", "direccion"].includes(role) && order.status === "logistica") {
-    return `<button class="small-button" type="button" data-deliver="${order.id}">Marcar entregado</button>`;
+    return `
+      <button class="small-button" type="button" data-date="${order.id}">Asignar fecha entrega</button>
+      <button class="small-button" type="button" data-deliver="${order.id}">Marcar entregado</button>
+    `;
   }
   return "";
+}
+
+function canSellerCancel(order) {
+  const blockedStatuses = ["produccion", "logistica", "entregado", "rechazado", "cancelado"];
+  return order.sellerId === currentUser().id && !blockedStatuses.includes(order.status);
 }
 
 function attachOrderActions() {
@@ -779,6 +799,9 @@ function attachOrderActions() {
   $$("[data-pay]").forEach((button) => button.addEventListener("click", () => confirmPayment(button.dataset.pay)));
   $$("[data-date]").forEach((button) => button.addEventListener("click", () => openDate(button.dataset.date)));
   $$("[data-convert]").forEach((button) => button.addEventListener("click", () => convertQuote(button.dataset.convert)));
+  $$("[data-cancel-order]").forEach((button) => {
+    button.addEventListener("click", () => cancelOrder(button.dataset.cancelOrder));
+  });
   $$("[data-deliver]").forEach((button) => {
     button.addEventListener("click", () => {
       const order = state.orders.find((item) => item.id === button.dataset.deliver);
@@ -813,7 +836,7 @@ function renderCalendar() {
                       <div class="calendar-item">
                         <strong>${order.id}</strong><br />
                         ${order.product}<br />
-                        <span class="meta">${order.quantity} u · ${order.source}</span>
+                        <span class="meta">${order.quantity} u · ${order.source}<br />${order.deliveryAddress || "Sin direccion"}</span>
                       </div>
                     `
                   )
@@ -856,6 +879,7 @@ async function createOrder(event) {
     client: data.client,
     clientPhone: data.clientPhone,
     clientEmail: data.clientEmail,
+    deliveryAddress: data.deliveryAddress,
     product: data.product,
     quantity: Number(data.quantity),
     source: product?.source || "taller",
@@ -988,9 +1012,19 @@ function confirmPayment(orderId) {
   saveState();
 }
 
+function cancelOrder(orderId) {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order || !canSellerCancel(order)) return;
+  const confirmed = window.confirm(`Cancelar ${order.id}?`);
+  if (!confirmed) return;
+  order.status = "cancelado";
+  order.comment = "Cancelado por el vendedor.";
+  saveState();
+}
+
 function openDate(orderId) {
   const order = state.orders.find((item) => item.id === orderId);
-  $("#dateTitle").textContent = order.source === "fabrica" ? `Fecha de fabrica ${order.id}` : `Fecha de taller ${order.id}`;
+  $("#dateTitle").textContent = order.status === "logistica" ? `Fecha de entrega ${order.id}` : order.source === "fabrica" ? `Fecha de fabrica ${order.id}` : `Fecha de taller ${order.id}`;
   $("#dateForm").orderId.value = orderId;
   $("#dateForm").committedDate.value = order.committedDate || order.requestedDate;
   $("#dateForm").comment.value = order.comment || "";
@@ -1004,8 +1038,12 @@ function resolveDate(event) {
   const data = Object.fromEntries(new FormData(event.currentTarget));
   const order = state.orders.find((item) => item.id === data.orderId);
   order.committedDate = data.committedDate;
-  order.comment = data.comment || "Fecha de entrega confirmada.";
-  order.status = "fecha_confirmada";
+  if (order.status === "logistica") {
+    order.comment = data.comment || "Fecha de entrega asignada por logistica.";
+  } else {
+    order.comment = data.comment || "Fecha de entrega confirmada.";
+    order.status = "fecha_confirmada";
+  }
   $("#dateDialog").close();
   saveState();
 }
