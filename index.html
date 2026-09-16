@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-3" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-4" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -284,6 +284,73 @@
             </div>
           </div>
           <div class="metrics" id="metrics"></div>
+        </section>
+
+        <section class="view" id="view-business" aria-label="Seguimiento del negocio">
+          <div class="section-header">
+            <div>
+              <h2>Seguimiento del negocio</h2>
+              <p>Capital, caja estimada, compras, gastos, ventas y rentabilidad para Direccion.</p>
+            </div>
+          </div>
+
+          <div class="metrics business-metrics" id="businessMetrics"></div>
+
+          <div class="business-layout">
+            <form class="panel" id="capitalForm">
+              <h3>Capital inicial</h3>
+              <label class="field">
+                <span>Monto</span>
+                <input name="initialCapital" type="number" min="0" step="100" required placeholder="0" />
+              </label>
+              <button class="primary-button full" type="submit">Actualizar capital</button>
+            </form>
+
+            <form class="panel" id="financeForm">
+              <h3>Movimiento</h3>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Tipo</span>
+                  <select name="type">
+                    <option value="compra">Compra</option>
+                    <option value="gasto">Gasto operativo</option>
+                    <option value="venta">Venta cobrada</option>
+                    <option value="ingreso">Ingreso extra</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Monto</span>
+                  <input name="amount" type="number" min="0" step="100" required placeholder="0" />
+                </label>
+              </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Fecha</span>
+                  <input name="date" type="date" required />
+                </label>
+                <label class="field">
+                  <span>Referencia</span>
+                  <input name="reference" placeholder="Proveedor, cliente o pedido" />
+                </label>
+              </div>
+              <label class="field">
+                <span>Detalle</span>
+                <textarea name="description" rows="3" placeholder="Descripcion breve del movimiento"></textarea>
+              </label>
+              <button class="primary-button full" type="submit">Cargar movimiento</button>
+            </form>
+          </div>
+
+          <div class="business-layout">
+            <div class="panel">
+              <h3>Resumen comercial</h3>
+              <div class="business-summary" id="businessSummary"></div>
+            </div>
+            <div class="panel">
+              <h3>Movimientos cargados</h3>
+              <div class="finance-table-wrap" id="financeTable"></div>
+            </div>
+          </div>
         </section>
 
         <section class="view" id="view-crm" aria-label="CRM">

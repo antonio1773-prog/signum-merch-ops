@@ -477,6 +477,80 @@ h3 {
   font-size: 28px;
 }
 
+.metric.positive strong {
+  color: var(--green);
+}
+
+.metric.negative strong {
+  color: #ff9b95;
+}
+
+.business-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.business-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.business-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #24212d;
+}
+
+.summary-row span {
+  color: var(--muted);
+}
+
+.summary-row strong {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.summary-row.total {
+  border-bottom: 0;
+  color: var(--ink);
+  font-size: 17px;
+}
+
+.finance-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.finance-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.finance-table th,
+.finance-table td {
+  padding: 10px;
+  border-bottom: 1px solid #24212d;
+  text-align: left;
+  vertical-align: top;
+}
+
+.finance-table th {
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .quick-form {
   max-width: 780px;
   margin: 28px auto 0;
@@ -936,7 +1010,8 @@ dialog::backdrop {
 
   .orders-layout,
   .planning-grid,
-  .catalog-grid {
+  .catalog-grid,
+  .business-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -966,6 +1041,7 @@ dialog::backdrop {
   }
 
   .metrics,
+  .business-metrics,
   .form-grid,
   .segmented,
   .order-meta {

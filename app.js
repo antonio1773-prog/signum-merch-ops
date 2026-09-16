@@ -35,6 +35,14 @@ const seedState = {
     { id: uid(), title: "Prioridad onboarding Q4", description: "Kits bienvenida con cupo preferencial hasta agotar 300 unidades.", priority: "alta", expires: iso(2), active: true },
     { id: uid(), title: "Bonificacion volumen", description: "10% off en remeras desde 150 unidades. No acumulable.", priority: "media", expires: iso(1), active: true }
   ],
+  finance: {
+    initialCapital: 1500000,
+    transactions: [
+      { id: uid(), type: "compra", amount: 420000, date: iso(-5), reference: "Stock inicial textiles", description: "Compra de remeras, gorras y avios.", createdAt: Date.now() - 432000000 },
+      { id: uid(), type: "gasto", amount: 95000, date: iso(-3), reference: "Taller", description: "Insumos y mantenimiento.", createdAt: Date.now() - 259200000 },
+      { id: uid(), type: "venta", amount: 850000, date: iso(-1), reference: "S-1043", description: "Cobro parcial Grupo Marea.", createdAt: Date.now() - 86400000 }
+    ]
+  },
   orders: [
     {
       id: "S-1042",
@@ -122,6 +130,7 @@ const viewTitles = {
   planning: "Productos y dinamicas",
   capacity: "Agenda de produccion",
   metrics: "Indicadores",
+  business: "Seguimiento del negocio",
   crm: "CRM de clientes",
   users: "Accesos"
 };
@@ -131,6 +140,7 @@ const tabs = {
   planning: "Planeamiento",
   capacity: "Agenda",
   metrics: "Indicadores",
+  business: "Negocio",
   crm: "CRM",
   users: "Accesos"
 };
@@ -197,6 +207,9 @@ function normalizeState(rawState) {
   parsed.clients ||= [];
   parsed.products ||= structuredClone(seedState.products);
   parsed.dynamics ||= structuredClone(seedState.dynamics);
+  parsed.finance ||= structuredClone(seedState.finance);
+  parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
+  parsed.finance.transactions ||= [];
   parsed.orders ||= [];
   parsed.orders = parsed.orders.map((order) => ({
     clientPhone: "",
@@ -373,6 +386,8 @@ function setup() {
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#clientForm").addEventListener("submit", createClient);
   $("#userForm").addEventListener("submit", createUser);
+  $("#capitalForm").addEventListener("submit", updateCapital);
+  $("#financeForm").addEventListener("submit", createFinanceTransaction);
   $("#planningDecisionForm").addEventListener("submit", resolvePlanningDecision);
   $("#dateForm").addEventListener("submit", resolveDate);
 
@@ -389,6 +404,7 @@ function setup() {
 
   $("#orderForm input[name='requestedDate']").value = iso(7);
   $("#dynamicForm input[name='expires']").value = iso(1);
+  $("#financeForm input[name='date']").value = iso(0);
   render();
   initializeRemoteState();
 }
@@ -437,7 +453,7 @@ function render() {
   const user = currentUser();
   if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
   if (user.role !== "vendedor" && ["new-order", "my-orders"].includes(activeView)) activeView = "workflow";
-  if (user.role !== "direccion" && ["crm", "users"].includes(activeView)) activeView = "workflow";
+  if (user.role !== "direccion" && ["crm", "users", "business"].includes(activeView)) activeView = "workflow";
 
   $("#roleEyebrow").textContent = `${user.name} · ${roleLabels[user.role]}`;
   $("#pageTitle").textContent = viewTitles[activeView];
@@ -458,6 +474,7 @@ function render() {
   renderWorkflow();
   renderCalendar();
   renderMetrics();
+  renderBusiness();
 }
 
 function renderUserSelect() {
@@ -480,7 +497,7 @@ function renderNav() {
   if (user.role === "vendedor") return;
   const roleTabs =
     user.role === "direccion"
-      ? ["workflow", "planning", "capacity", "metrics", "crm", "users", "new-order"]
+      ? ["workflow", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
       : ["workflow", "planning", "capacity", "metrics"];
   $("#navTabs").innerHTML = roleTabs
     .map((tab) => `<button type="button" class="${tab === activeView ? "active" : ""}" data-tab="${tab}">${tab === "new-order" ? "Cargar pedido" : tabs[tab]}</button>`)
@@ -877,6 +894,108 @@ function renderMetrics() {
     .join("");
 }
 
+function productPrice(productName) {
+  return Number(state.products.find((product) => product.name === productName)?.price || 0);
+}
+
+function orderRevenue(order) {
+  return productPrice(order.product) * Number(order.quantity || 0);
+}
+
+function financeTotals() {
+  const transactions = state.finance?.transactions || [];
+  const purchases = transactions.filter((item) => item.type === "compra").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const expenses = transactions.filter((item) => item.type === "gasto").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const paidSales = transactions.filter((item) => item.type === "venta").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const extraIncome = transactions.filter((item) => item.type === "ingreso").reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const approvedOrders = state.orders.filter((order) => ["esperando_senia", "taller_fecha", "fabrica_fecha_planeamiento", "fecha_confirmada", "produccion", "logistica", "entregado"].includes(order.status));
+  const deliveredOrders = state.orders.filter((order) => order.status === "entregado");
+  const projectedSales = approvedOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
+  const deliveredSales = deliveredOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
+  const initialCapital = Number(state.finance?.initialCapital || 0);
+  const cash = initialCapital + paidSales + extraIncome - purchases - expenses;
+  const result = paidSales + extraIncome - purchases - expenses;
+  return { initialCapital, purchases, expenses, paidSales, extraIncome, projectedSales, deliveredSales, cash, result };
+}
+
+function renderBusiness() {
+  if (!$("#businessMetrics")) return;
+  const totals = financeTotals();
+  $("#capitalForm").initialCapital.value = totals.initialCapital || "";
+  $("#businessMetrics").innerHTML = [
+    ["Capital inicial", money(totals.initialCapital), ""],
+    ["Caja estimada", money(totals.cash), totals.cash >= 0 ? "positive" : "negative"],
+    ["Ventas cobradas", money(totals.paidSales), "positive"],
+    ["Compras + gastos", money(totals.purchases + totals.expenses), "negative"],
+    ["Resultado", money(totals.result), totals.result >= 0 ? "positive" : "negative"],
+    ["Ventas proyectadas", money(totals.projectedSales), ""],
+    ["Pedidos entregados", money(totals.deliveredSales), ""],
+    ["Ingresos extra", money(totals.extraIncome), "positive"]
+  ]
+    .map(([label, value, tone]) => `<article class="metric ${tone}"><span>${label}</span><strong>${value}</strong></article>`)
+    .join("");
+
+  $("#businessSummary").innerHTML = `
+    <div class="summary-row"><span>Capital inicial</span><strong>${money(totals.initialCapital)}</strong></div>
+    <div class="summary-row"><span>Ventas cobradas manuales</span><strong>${money(totals.paidSales)}</strong></div>
+    <div class="summary-row"><span>Ingresos extra</span><strong>${money(totals.extraIncome)}</strong></div>
+    <div class="summary-row"><span>Compras</span><strong>${money(totals.purchases)}</strong></div>
+    <div class="summary-row"><span>Gastos operativos</span><strong>${money(totals.expenses)}</strong></div>
+    <div class="summary-row total"><span>Caja estimada</span><strong>${money(totals.cash)}</strong></div>
+    <div class="summary-row"><span>Ventas proyectadas por pedidos aprobados</span><strong>${money(totals.projectedSales)}</strong></div>
+  `;
+
+  const transactions = [...(state.finance?.transactions || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.createdAt - a.createdAt);
+  $("#financeTable").innerHTML = transactions.length
+    ? `
+      <table class="finance-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Referencia</th>
+            <th>Detalle</th>
+            <th>Monto</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${transactions
+            .map(
+              (item) => `
+                <tr>
+                  <td>${formatDate(item.date)}</td>
+                  <td><span class="badge neutral">${financeTypeLabel(item.type)}</span></td>
+                  <td>${item.reference || "-"}</td>
+                  <td>${item.description || "-"}</td>
+                  <td class="number-cell">${money(item.amount)}</td>
+                  <td><button class="small-button danger-inline" type="button" data-remove-finance="${item.id}">Eliminar</button></td>
+                </tr>
+              `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `
+    : `<div class="empty-state">No hay movimientos cargados.</div>`;
+
+  $$("[data-remove-finance]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.finance.transactions = state.finance.transactions.filter((item) => item.id !== button.dataset.removeFinance);
+      saveState();
+    });
+  });
+}
+
+function financeTypeLabel(type) {
+  return {
+    compra: "Compra",
+    gasto: "Gasto",
+    venta: "Venta cobrada",
+    ingreso: "Ingreso"
+  }[type] || type;
+}
+
 async function createOrder(event) {
   event.preventDefault();
   const user = currentUser();
@@ -985,6 +1104,30 @@ function createUser(event) {
   });
   renderLoginUsers();
   event.currentTarget.reset();
+  saveState();
+}
+
+function updateCapital(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  state.finance.initialCapital = Number(data.initialCapital || 0);
+  saveState();
+}
+
+function createFinanceTransaction(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  state.finance.transactions.push({
+    id: uid(),
+    type: data.type,
+    amount: Number(data.amount || 0),
+    date: data.date,
+    reference: data.reference,
+    description: data.description,
+    createdAt: Date.now()
+  });
+  event.currentTarget.reset();
+  event.currentTarget.date.value = iso(0);
   saveState();
 }
 
