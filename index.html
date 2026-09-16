@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-4" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-5" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -325,6 +325,21 @@
               </div>
               <div class="form-grid">
                 <label class="field">
+                  <span>Codigo producto</span>
+                  <input name="productCode" list="purchaseCodeList" placeholder="REM-001" />
+                  <datalist id="purchaseCodeList"></datalist>
+                </label>
+                <label class="field">
+                  <span>Cantidad comprada</span>
+                  <input name="quantity" type="number" min="0" step="1" placeholder="Opcional" />
+                </label>
+              </div>
+              <label class="field">
+                <span>Descripcion compra</span>
+                <input name="productDescription" placeholder="Tela, taza, remera blanca, hoja sublimacion" />
+              </label>
+              <div class="form-grid">
+                <label class="field">
                   <span>Fecha</span>
                   <input name="date" type="date" required />
                 </label>
@@ -337,8 +352,84 @@
                 <span>Detalle</span>
                 <textarea name="description" rows="3" placeholder="Descripcion breve del movimiento"></textarea>
               </label>
+              <label class="field file-field">
+                <span>Factura</span>
+                <input name="invoiceImage" type="file" accept="image/*,.pdf" />
+              </label>
               <button class="primary-button full" type="submit">Cargar movimiento</button>
             </form>
+          </div>
+
+          <div class="panel pricing-panel">
+            <div class="section-header compact">
+              <div>
+                <h3>Pricing de productos</h3>
+                <p>Arma el precio con costo de compra, produccion, sublimacion, vendedores e IVA.</p>
+              </div>
+            </div>
+
+            <form id="pricingForm" class="pricing-form">
+              <div class="form-grid">
+                <label class="field">
+                  <span>Codigo producto</span>
+                  <input name="productCode" list="purchaseCodeList" required placeholder="REM-001" />
+                </label>
+                <label class="field">
+                  <span>Producto</span>
+                  <input name="productName" required placeholder="Remera sublimada" />
+                </label>
+              </div>
+              <label class="field">
+                <span>Descripcion</span>
+                <input name="description" placeholder="Material, tecnica, presentacion" />
+              </label>
+              <div class="pricing-grid">
+                <label class="field">
+                  <span>Costo manual</span>
+                  <input name="manualCost" type="number" min="0" step="1" placeholder="Usa compra si queda vacio" />
+                </label>
+                <label class="field">
+                  <span>Costo produccion</span>
+                  <input name="productionCost" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Hoja sublimacion</span>
+                  <input name="sublimationSheet" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Desgaste maquina</span>
+                  <input name="machineWear" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Mano de obra</span>
+                  <input name="labor" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Diseno</span>
+                  <input name="design" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Electricidad</span>
+                  <input name="electricity" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Vendedor 1</span>
+                  <input name="seller1" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field">
+                  <span>Vendedor 2</span>
+                  <input name="seller2" type="number" min="0" step="1" value="0" />
+                </label>
+                <label class="field check-field">
+                  <span>IVA</span>
+                  <label><input name="iva" type="checkbox" /> Sumar 21%</label>
+                </label>
+              </div>
+              <div class="pricing-preview" id="pricingPreview"></div>
+              <button class="primary-button full" type="submit">Guardar pricing</button>
+            </form>
+
+            <div class="finance-table-wrap" id="pricingTable"></div>
           </div>
 
           <div class="business-layout">

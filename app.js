@@ -38,9 +38,30 @@ const seedState = {
   finance: {
     initialCapital: 1500000,
     transactions: [
-      { id: uid(), type: "compra", amount: 420000, date: iso(-5), reference: "Stock inicial textiles", description: "Compra de remeras, gorras y avios.", createdAt: Date.now() - 432000000 },
+      { id: uid(), type: "compra", amount: 420000, quantity: 100, productCode: "REM-001", productDescription: "Remera blanca base", invoiceImage: "", date: iso(-5), reference: "Stock inicial textiles", description: "Compra de remeras, gorras y avios.", createdAt: Date.now() - 432000000 },
       { id: uid(), type: "gasto", amount: 95000, date: iso(-3), reference: "Taller", description: "Insumos y mantenimiento.", createdAt: Date.now() - 259200000 },
       { id: uid(), type: "venta", amount: 850000, date: iso(-1), reference: "S-1043", description: "Cobro parcial Grupo Marea.", createdAt: Date.now() - 86400000 }
+    ],
+    pricing: [
+      {
+        id: uid(),
+        productCode: "REM-001",
+        productName: "Remera sublimada",
+        description: "Remera blanca con sublimacion frente",
+        manualCost: 0,
+        purchaseCost: 4200,
+        productionCost: 1200,
+        sublimationSheet: 550,
+        machineWear: 180,
+        labor: 900,
+        design: 450,
+        electricity: 120,
+        seller1: 700,
+        seller2: 0,
+        iva: true,
+        total: 10043,
+        createdAt: Date.now() - 86400000
+      }
     ]
   },
   orders: [
@@ -210,6 +231,14 @@ function normalizeState(rawState) {
   parsed.finance ||= structuredClone(seedState.finance);
   parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
   parsed.finance.transactions ||= [];
+  parsed.finance.transactions = parsed.finance.transactions.map((item) => ({
+    quantity: 0,
+    productCode: "",
+    productDescription: "",
+    invoiceImage: "",
+    ...item
+  }));
+  parsed.finance.pricing ||= [];
   parsed.orders ||= [];
   parsed.orders = parsed.orders.map((order) => ({
     clientPhone: "",
@@ -388,6 +417,8 @@ function setup() {
   $("#userForm").addEventListener("submit", createUser);
   $("#capitalForm").addEventListener("submit", updateCapital);
   $("#financeForm").addEventListener("submit", createFinanceTransaction);
+  $("#pricingForm").addEventListener("submit", createPricing);
+  $("#pricingForm").addEventListener("input", updatePricingPreview);
   $("#planningDecisionForm").addEventListener("submit", resolvePlanningDecision);
   $("#dateForm").addEventListener("submit", resolveDate);
 
@@ -918,10 +949,72 @@ function financeTotals() {
   return { initialCapital, purchases, expenses, paidSales, extraIncome, projectedSales, deliveredSales, cash, result };
 }
 
+function purchaseCodes() {
+  const map = new Map();
+  (state.finance?.transactions || [])
+    .filter((item) => item.type === "compra" && item.productCode)
+    .forEach((item) => {
+      const code = item.productCode.trim().toUpperCase();
+      if (!map.has(code)) {
+        map.set(code, item.productDescription || item.description || "");
+      }
+    });
+  return [...map.entries()].map(([code, description]) => ({ code, description }));
+}
+
+function purchaseUnitCost(productCode) {
+  const code = String(productCode || "").trim().toUpperCase();
+  if (!code) return 0;
+  const purchases = (state.finance?.transactions || []).filter((item) => item.type === "compra" && String(item.productCode || "").trim().toUpperCase() === code);
+  const totalAmount = purchases.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const totalQuantity = purchases.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  return totalQuantity > 0 ? totalAmount / totalQuantity : totalAmount;
+}
+
+function pricingFromForm(form) {
+  const data = Object.fromEntries(new FormData(form));
+  const productCode = String(data.productCode || "").trim().toUpperCase();
+  const purchaseCost = purchaseUnitCost(productCode);
+  const manualCost = Number(data.manualCost || 0);
+  const baseCost = manualCost || purchaseCost;
+  const productionCost = Number(data.productionCost || 0);
+  const sublimationSheet = Number(data.sublimationSheet || 0);
+  const machineWear = Number(data.machineWear || 0);
+  const labor = Number(data.labor || 0);
+  const design = Number(data.design || 0);
+  const electricity = Number(data.electricity || 0);
+  const seller1 = Number(data.seller1 || 0);
+  const seller2 = Number(data.seller2 || 0);
+  const subtotal = baseCost + productionCost + sublimationSheet + machineWear + labor + design + electricity + seller1 + seller2;
+  const ivaAmount = data.iva ? subtotal * 0.21 : 0;
+  return {
+    productCode,
+    productName: data.productName,
+    description: data.description,
+    manualCost,
+    purchaseCost,
+    productionCost,
+    sublimationSheet,
+    machineWear,
+    labor,
+    design,
+    electricity,
+    seller1,
+    seller2,
+    iva: Boolean(data.iva),
+    subtotal,
+    ivaAmount,
+    total: subtotal + ivaAmount
+  };
+}
+
 function renderBusiness() {
   if (!$("#businessMetrics")) return;
   const totals = financeTotals();
   $("#capitalForm").initialCapital.value = totals.initialCapital || "";
+  $("#purchaseCodeList").innerHTML = purchaseCodes()
+    .map((item) => `<option value="${item.code}">${item.description}</option>`)
+    .join("");
   $("#businessMetrics").innerHTML = [
     ["Capital inicial", money(totals.initialCapital), ""],
     ["Caja estimada", money(totals.cash), totals.cash >= 0 ? "positive" : "negative"],
@@ -953,8 +1046,12 @@ function renderBusiness() {
           <tr>
             <th>Fecha</th>
             <th>Tipo</th>
+            <th>Codigo</th>
+            <th>Producto comprado</th>
+            <th>Cant.</th>
             <th>Referencia</th>
             <th>Detalle</th>
+            <th>Factura</th>
             <th>Monto</th>
             <th></th>
           </tr>
@@ -966,8 +1063,12 @@ function renderBusiness() {
                 <tr>
                   <td>${formatDate(item.date)}</td>
                   <td><span class="badge neutral">${financeTypeLabel(item.type)}</span></td>
+                  <td>${item.productCode || "-"}</td>
+                  <td>${item.productDescription || "-"}</td>
+                  <td class="number-cell">${item.quantity || "-"}</td>
                   <td>${item.reference || "-"}</td>
                   <td>${item.description || "-"}</td>
+                  <td>${item.invoiceImage ? `<a class="invoice-link" href="${item.invoiceImage}" target="_blank" rel="noreferrer">Ver factura</a>` : "-"}</td>
                   <td class="number-cell">${money(item.amount)}</td>
                   <td><button class="small-button danger-inline" type="button" data-remove-finance="${item.id}">Eliminar</button></td>
                 </tr>
@@ -985,6 +1086,8 @@ function renderBusiness() {
       saveState();
     });
   });
+  renderPricing();
+  updatePricingPreview();
 }
 
 function financeTypeLabel(type) {
@@ -994,6 +1097,67 @@ function financeTypeLabel(type) {
     venta: "Venta cobrada",
     ingreso: "Ingreso"
   }[type] || type;
+}
+
+function renderPricing() {
+  const rows = [...(state.finance?.pricing || [])].sort((a, b) => b.createdAt - a.createdAt);
+  $("#pricingTable").innerHTML = rows.length
+    ? `
+      <table class="finance-table pricing-table">
+        <thead>
+          <tr>
+            <th>Codigo</th>
+            <th>Producto</th>
+            <th>Costo compra</th>
+            <th>Produccion</th>
+            <th>Sublimacion</th>
+            <th>Vendedores</th>
+            <th>IVA</th>
+            <th>Precio final</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              (item) => `
+                <tr>
+                  <td><strong>${item.productCode}</strong></td>
+                  <td>${item.productName}<br /><span class="meta">${item.description || "-"}</span></td>
+                  <td class="number-cell">${money(item.manualCost || item.purchaseCost || 0)}</td>
+                  <td class="number-cell">${money(Number(item.productionCost || 0) + Number(item.labor || 0) + Number(item.design || 0) + Number(item.electricity || 0))}</td>
+                  <td class="number-cell">${money(Number(item.sublimationSheet || 0) + Number(item.machineWear || 0))}</td>
+                  <td class="number-cell">${money(Number(item.seller1 || 0) + Number(item.seller2 || 0))}</td>
+                  <td>${item.iva ? "Si" : "No"}</td>
+                  <td class="number-cell"><strong>${money(item.total || 0)}</strong></td>
+                  <td><button class="small-button danger-inline" type="button" data-remove-pricing="${item.id}">Eliminar</button></td>
+                </tr>
+              `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `
+    : `<div class="empty-state">No hay precios armados.</div>`;
+
+  $$("[data-remove-pricing]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.finance.pricing = state.finance.pricing.filter((item) => item.id !== button.dataset.removePricing);
+      saveState();
+    });
+  });
+}
+
+function updatePricingPreview() {
+  if (!$("#pricingPreview")) return;
+  const form = $("#pricingForm");
+  const pricing = pricingFromForm(form);
+  $("#pricingPreview").innerHTML = `
+    <div><span>Costo desde compras</span><strong>${money(pricing.purchaseCost)}</strong></div>
+    <div><span>Subtotal sin IVA</span><strong>${money(pricing.subtotal)}</strong></div>
+    <div><span>IVA 21%</span><strong>${money(pricing.ivaAmount)}</strong></div>
+    <div><span>Precio final</span><strong>${money(pricing.total)}</strong></div>
+  `;
 }
 
 async function createOrder(event) {
@@ -1114,20 +1278,42 @@ function updateCapital(event) {
   saveState();
 }
 
-function createFinanceTransaction(event) {
+async function createFinanceTransaction(event) {
   event.preventDefault();
-  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const invoiceImage = await readImage(form.invoiceImage.files[0]);
   state.finance.transactions.push({
     id: uid(),
     type: data.type,
     amount: Number(data.amount || 0),
+    quantity: Number(data.quantity || 0),
+    productCode: String(data.productCode || "").trim().toUpperCase(),
+    productDescription: data.productDescription,
     date: data.date,
     reference: data.reference,
     description: data.description,
+    invoiceImage,
+    createdAt: Date.now()
+  });
+  form.reset();
+  form.date.value = iso(0);
+  saveState();
+}
+
+function createPricing(event) {
+  event.preventDefault();
+  const pricing = pricingFromForm(event.currentTarget);
+  state.finance.pricing.push({
+    id: uid(),
+    ...pricing,
     createdAt: Date.now()
   });
   event.currentTarget.reset();
-  event.currentTarget.date.value = iso(0);
+  ["productionCost", "sublimationSheet", "machineWear", "labor", "design", "electricity", "seller1", "seller2"].forEach((name) => {
+    event.currentTarget[name].value = 0;
+  });
+  updatePricingPreview();
   saveState();
 }
 
