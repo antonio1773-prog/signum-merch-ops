@@ -35,6 +35,29 @@ const seedState = {
     { id: uid(), title: "Prioridad onboarding Q4", description: "Kits bienvenida con cupo preferencial hasta agotar 300 unidades.", priority: "alta", expires: iso(2), active: true },
     { id: uid(), title: "Bonificacion volumen", description: "10% off en remeras desde 150 unidades. No acumulable.", priority: "media", expires: iso(1), active: true }
   ],
+  quoteConfig: {
+    costs: {
+      paper: 92.26, ink: 93.85, tape: 25.11, labor: 320, printerDepreciation: 45.52,
+      pressDepreciation: 41.43, electricity: 10, laborHourValue: 8000, unitsPerBatch: 100,
+      hoursPerBatch: 4, inkMlPerUnit: 1.5, tapeCmPerUnit: 20
+    },
+    policy: { wasteRate: 3, taxRate: 2, commissionRate: 20, targetMarginRate: 10, roundingMultiple: 50 },
+    products: [{
+      id: "friselina-sublimada", name: "Bolsas de friselina sublimadas", material: "Friselina 80 g",
+      colors: ["Blanco", "Beige", "Negro"], active: true,
+      printOptions: [{ id: "standard-one-side", name: "Estampa estandar - una cara", costMultiplier: 1 }],
+      variants: [
+        ["BOL-302010", "30x20x10", 30, 20, 10, 137.41, 2500], ["BOL-303010", "30x30x10", 30, 30, 10, 221.41, 1000],
+        ["BOL-392010", "39x20x10", 39, 20, 10, 156.94, 2500], ["BOL-403010", "40x30x10", 40, 30, 10, 262.10, 1000],
+        ["BOL-403510", "40x35x10", 40, 35, 10, 313.88, 1000], ["BOL-404010", "40x40x10", 40, 40, 10, 338.29, 1000],
+        ["BOL-404510", "40x45x10", 40, 45, 10, 362.70, 1000], ["BOL-405010", "40x50x10", 40, 50, 10, 387.11, 1000],
+        ["BOL-405510", "40x55x10", 40, 55, 10, 411.53, 1000], ["BOL-505010", "50x50x10", 50, 50, 10, 440.82, 4000],
+        ["BOL-606010", "60x60x10", 60, 60, 10, 562.88, 3200], ["BOL-607010", "60x70x10", 60, 70, 10, 631.24, 3200],
+        ["BOL-609010", "60x90x10", 60, 90, 10, 767.95, 3200]
+      ].map(([sku, name, width, height, gusset, purchaseCost, supplierMinimum]) => ({ sku, id: sku, name, width, height, gusset, grammage: 80, purchaseCost, supplierMinimum, active: true }))
+    }]
+  },
+  quotes: [],
   finance: {
     initialCapital: 1500000,
     transactions: [
@@ -149,6 +172,7 @@ const viewTitles = {
   "my-orders": "Pedidos realizados",
   workflow: "Gestion de pedidos",
   planning: "Productos y dinamicas",
+  quotes: "Cotizador de trabajos",
   capacity: "Agenda de produccion",
   metrics: "Indicadores",
   business: "Seguimiento del negocio",
@@ -159,6 +183,7 @@ const viewTitles = {
 const tabs = {
   workflow: "Gestion",
   planning: "Planeamiento",
+  quotes: "Cotizador",
   capacity: "Agenda",
   metrics: "Indicadores",
   business: "Negocio",
@@ -226,6 +251,11 @@ function normalizeState(rawState) {
     }
   });
   parsed.clients ||= [];
+  parsed.quoteConfig ||= structuredClone(seedState.quoteConfig);
+  parsed.quoteConfig.costs = { ...structuredClone(seedState.quoteConfig.costs), ...(parsed.quoteConfig.costs || {}) };
+  parsed.quoteConfig.policy = { ...structuredClone(seedState.quoteConfig.policy), ...(parsed.quoteConfig.policy || {}) };
+  parsed.quoteConfig.products ||= structuredClone(seedState.quoteConfig.products);
+  parsed.quotes ||= [];
   parsed.products ||= structuredClone(seedState.products);
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.finance ||= structuredClone(seedState.finance);
@@ -358,7 +388,7 @@ function currentUser() {
 }
 
 function money(value) {
-  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 2 }).format(value);
 }
 
 function formatDate(value) {
@@ -419,6 +449,14 @@ function setup() {
   $("#financeForm").addEventListener("submit", createFinanceTransaction);
   $("#pricingForm").addEventListener("submit", createPricing);
   $("#pricingForm").addEventListener("input", updatePricingPreview);
+  $("#quoteForm").addEventListener("input", updateQuotePreview);
+  $("#quoteForm").addEventListener("submit", saveQuote);
+  $("#quoteProductSelect").addEventListener("change", () => {
+    renderQuoteSelectors();
+    updateQuotePreview();
+  });
+  $("#quoteConfigForm").addEventListener("submit", saveQuoteConfig);
+  $("#clearQuoteButton").addEventListener("click", clearQuoteForm);
   $("#planningDecisionForm").addEventListener("submit", resolvePlanningDecision);
   $("#dateForm").addEventListener("submit", resolveDate);
 
@@ -482,7 +520,7 @@ function render() {
   $("#appShell").classList.remove("is-hidden");
   renderUserSelect();
   const user = currentUser();
-  if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
+  if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "quotes", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
   if (user.role !== "vendedor" && ["new-order", "my-orders"].includes(activeView)) activeView = "workflow";
   if (user.role !== "direccion" && ["crm", "users", "business"].includes(activeView)) activeView = "workflow";
 
@@ -506,6 +544,7 @@ function render() {
   renderCalendar();
   renderMetrics();
   renderBusiness();
+  renderQuotes();
 }
 
 function renderUserSelect() {
@@ -528,14 +567,17 @@ function renderNav() {
   if (user.role === "vendedor") return;
   const roleTabs =
     user.role === "direccion"
-      ? ["workflow", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
-      : ["workflow", "planning", "capacity", "metrics"];
+      ? ["workflow", "quotes", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
+      : user.role === "planeamiento"
+        ? ["workflow", "quotes", "planning", "capacity", "metrics"]
+        : ["workflow", "planning", "capacity", "metrics"];
   $("#navTabs").innerHTML = roleTabs
     .map((tab) => `<button type="button" class="${tab === activeView ? "active" : ""}" data-tab="${tab}">${tab === "new-order" ? "Cargar pedido" : tabs[tab]}</button>`)
     .join("");
   $$("#navTabs button").forEach((button) => {
     button.addEventListener("click", () => {
       activeView = button.dataset.tab;
+      $("#accountMenu").open = false;
       render();
     });
   });
@@ -1395,6 +1437,219 @@ function convertQuote(orderId) {
   order.requestType = "pedido";
   order.status = "pedido_planeamiento";
   order.comment = "Presupuesto aceptado por el cliente. Vuelve a planeamiento para aprobacion de pedido.";
+  saveState();
+}
+
+function activeQuoteProduct() {
+  return state.quoteConfig.products.find((product) => product.id === $("#quoteProductSelect").value) || state.quoteConfig.products.find((product) => product.active);
+}
+
+function activeQuoteVariant() {
+  const product = activeQuoteProduct();
+  return product?.variants.find((variant) => variant.id === $("#quoteVariantSelect").value) || product?.variants.find((variant) => variant.active);
+}
+
+function visibleQuotes() {
+  const user = currentUser();
+  return user.role === "vendedor" ? state.quotes.filter((quote) => quote.sellerId === user.id) : state.quotes;
+}
+
+function nextQuoteId() {
+  const max = state.quotes.reduce((highest, quote) => Math.max(highest, Number(String(quote.id).replace(/\D/g, "")) || 0), 0);
+  return `COT-${String(max + 1).padStart(4, "0")}`;
+}
+
+function renderQuoteSelectors() {
+  const form = $("#quoteForm");
+  const selectedProduct = form.productId.value;
+  const selectedVariant = form.variantId.value;
+  const products = state.quoteConfig.products.filter((product) => product.active);
+  form.productId.innerHTML = products.map((product) => `<option value="${product.id}">${product.name}</option>`).join("");
+  if (products.some((product) => product.id === selectedProduct)) form.productId.value = selectedProduct;
+  const product = activeQuoteProduct();
+  const variants = product?.variants.filter((variant) => variant.active) || [];
+  form.variantId.innerHTML = variants.map((variant) => `<option value="${variant.id}">${variant.name}</option>`).join("");
+  if (variants.some((variant) => variant.id === selectedVariant)) form.variantId.value = selectedVariant;
+  form.color.innerHTML = (product?.colors || []).map((color) => `<option value="${color}">${color}</option>`).join("");
+  form.printOption.innerHTML = (product?.printOptions || []).map((option) => `<option value="${option.id}">${option.name}</option>`).join("");
+}
+
+function quoteCalculationFromForm() {
+  const form = $("#quoteForm");
+  const variant = activeQuoteVariant();
+  if (!variant) return null;
+  return SignumPricing.calculateQuote(variant, state.quoteConfig, form.quantity.value, form.offeredUnitPrice.value);
+}
+
+function updateQuotePreview() {
+  if (!$("#quoteResult")) return;
+  const calculation = quoteCalculationFromForm();
+  const variant = activeQuoteVariant();
+  if (!calculation || !variant) return;
+  const trafficLabel = calculation.profitability === "green" ? "Rentabilidad saludable" : calculation.profitability === "yellow" ? "Rentabilidad a revisar" : calculation.profitability === "loss" ? "OPERACION CON PERDIDA" : "Rentabilidad baja";
+  $("#quoteResult").className = `quote-result ${calculation.profitability}`;
+  $("#quoteResult").innerHTML = `
+    <div class="quote-total"><span>Precio unitario</span><strong>${money(calculation.unitPrice)}</strong></div>
+    <div><span>Cantidad</span><strong>${calculation.quantity}</strong></div>
+    <div><span>Total cotizacion</span><strong>${money(calculation.saleTotal)}</strong></div>
+    <div><span>Comision estimada</span><strong>${money(calculation.commission)}</strong></div>
+    <div class="profit-signal"><span></span><strong>${trafficLabel}</strong><small>${calculation.marginRate}% margen Signum</small></div>`;
+  const admin = currentUser().role === "direccion";
+  $("#quoteBreakdown").classList.toggle("is-hidden", !admin);
+  $("#quoteBreakdown").innerHTML = admin ? `
+    <h3>Detalle interno</h3>
+    <div class="business-summary">
+      <div class="summary-row"><span>Bolsa virgen</span><strong>${money(variant.purchaseCost)}</strong></div>
+      <div class="summary-row"><span>Papel</span><strong>${money(state.quoteConfig.costs.paper)}</strong></div>
+      <div class="summary-row"><span>Tinta</span><strong>${money(state.quoteConfig.costs.ink)}</strong></div>
+      <div class="summary-row"><span>Cinta</span><strong>${money(state.quoteConfig.costs.tape)}</strong></div>
+      <div class="summary-row"><span>Mano de obra</span><strong>${money(state.quoteConfig.costs.labor)}</strong></div>
+      <div class="summary-row"><span>Amortizaciones</span><strong>${money(state.quoteConfig.costs.printerDepreciation + state.quoteConfig.costs.pressDepreciation)}</strong></div>
+      <div class="summary-row"><span>Merma</span><strong>${money(calculation.wasteAmount)}</strong></div>
+      <div class="summary-row"><span>Electricidad</span><strong>${money(state.quoteConfig.costs.electricity)}</strong></div>
+      <div class="summary-row total"><span>Costo unitario</span><strong>${money(calculation.unitCost)}</strong></div>
+      <div class="summary-row"><span>Precio tecnico</span><strong>${money(calculation.technicalPrice)}</strong></div>
+      <div class="summary-row"><span>Impuestos</span><strong>${money(calculation.taxes)}</strong></div>
+      <div class="summary-row"><span>Comision</span><strong>${money(calculation.commission)}</strong></div>
+      <div class="summary-row total"><span>Resultado Signum</span><strong>${money(calculation.signumResult)} (${calculation.marginRate}%)</strong></div>
+    </div>` : "";
+}
+
+function renderQuotes() {
+  if (!$("#quoteForm")) return;
+  renderQuoteSelectors();
+  $("#quoteAdminPanel").classList.toggle("is-hidden", currentUser().role !== "direccion");
+  renderQuoteConfig();
+  updateQuotePreview();
+  const statusNames = { draft: "Borrador", sent: "Enviada", accepted: "Aceptada", rejected: "Rechazada", converted: "Convertida en venta" };
+  const rows = [...visibleQuotes()].sort((a, b) => b.createdAt - a.createdAt);
+  $("#quoteHistory").innerHTML = rows.length ? `
+    <table class="finance-table quote-table"><thead><tr><th>Cotizacion</th><th>Cliente</th><th>Producto</th><th>Cant.</th><th>Unitario</th><th>Total</th><th>Margen</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody>${rows.map((quote) => `<tr>
+      <td><strong>${quote.id}</strong><br><span class="meta">${quote.seller}</span></td><td>${quote.client}</td><td>${quote.productName}<br><span class="meta">${quote.variantName} · ${quote.color}</span></td>
+      <td>${quote.calculation.quantity}</td><td>${money(quote.calculation.unitPrice)}</td><td>${money(quote.calculation.saleTotal)}</td>
+      <td><span class="rent-dot ${quote.calculation.profitability}"></span>${quote.calculation.marginRate}%</td><td>${statusNames[quote.status]}</td>
+      <td><div class="matrix-actions">${quoteActionButtons(quote)}</div></td></tr>`).join("")}</tbody></table>` : `<div class="empty-state">Todavia no hay cotizaciones guardadas.</div>`;
+  attachQuoteActions();
+}
+
+function quoteActionButtons(quote) {
+  const manager = ["planeamiento", "direccion"].includes(currentUser().role);
+  const actions = [`<button class="small-button" type="button" data-duplicate-quote="${quote.id}">Duplicar</button>`];
+  if (quote.status === "draft") actions.push(`<button class="small-button" type="button" data-quote-status="${quote.id}" data-status="sent">Marcar enviada</button>`);
+  if (manager && quote.status === "sent") {
+    actions.push(`<button class="small-button" type="button" data-quote-status="${quote.id}" data-status="accepted">Aceptar</button>`);
+    actions.push(`<button class="small-button danger-inline" type="button" data-quote-status="${quote.id}" data-status="rejected">Rechazar</button>`);
+  }
+  if (manager && quote.status === "accepted") actions.push(`<button class="small-button" type="button" data-convert-quote="${quote.id}">Convertir en venta</button>`);
+  return actions.join("");
+}
+
+function attachQuoteActions() {
+  $$('[data-quote-status]').forEach((button) => button.addEventListener("click", () => {
+    const quote = state.quotes.find((item) => item.id === button.dataset.quoteStatus);
+    if (!quote) return;
+    quote.status = button.dataset.status;
+    quote.updatedAt = Date.now();
+    saveState();
+  }));
+  $$('[data-duplicate-quote]').forEach((button) => button.addEventListener("click", () => loadQuoteIntoForm(button.dataset.duplicateQuote)));
+  $$('[data-convert-quote]').forEach((button) => button.addEventListener("click", () => convertSavedQuote(button.dataset.convertQuote)));
+  $$('[data-variant-cost]').forEach((input) => input.addEventListener("change", () => {
+    const product = state.quoteConfig.products.find((item) => item.id === input.dataset.productId);
+    const variant = product?.variants.find((item) => item.id === input.dataset.variantCost);
+    if (!variant) return;
+    variant.purchaseCost = Number(input.value || 0);
+    saveState();
+  }));
+}
+
+function saveQuote(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const product = activeQuoteProduct();
+  const variant = activeQuoteVariant();
+  const printOption = product.printOptions.find((option) => option.id === data.printOption);
+  const calculation = quoteCalculationFromForm();
+  const existing = state.quotes.find((quote) => quote.id === data.quoteId);
+  const quote = {
+    id: existing?.id || nextQuoteId(), sellerId: currentUser().id, seller: currentUser().name,
+    client: data.client.trim(), productId: product.id, productName: product.name, variantId: variant.id,
+    variantName: variant.name, color: data.color, printOption: printOption?.name || "Estampa estandar",
+    notes: data.notes || "", status: existing?.status || "draft", calculation,
+    snapshot: { config: structuredClone(state.quoteConfig), variant: structuredClone(variant) },
+    createdAt: existing?.createdAt || Date.now(), updatedAt: Date.now(), orderId: existing?.orderId || ""
+  };
+  if (existing) Object.assign(existing, quote); else state.quotes.push(quote);
+  upsertClient(quote.client, "", "");
+  clearQuoteForm(false);
+  saveState();
+}
+
+function loadQuoteIntoForm(quoteId) {
+  const source = state.quotes.find((quote) => quote.id === quoteId);
+  if (!source) return;
+  const form = $("#quoteForm");
+  form.reset();
+  form.quoteId.value = "";
+  form.client.value = source.client;
+  form.productId.value = source.productId;
+  renderQuoteSelectors();
+  form.variantId.value = source.variantId;
+  form.color.value = source.color;
+  form.quantity.value = source.calculation.quantity;
+  form.offeredUnitPrice.value = source.calculation.unitPrice;
+  form.notes.value = source.notes;
+  updateQuotePreview();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function clearQuoteForm(update = true) {
+  const form = $("#quoteForm");
+  form.reset();
+  form.quoteId.value = "";
+  form.quantity.value = 100;
+  renderQuoteSelectors();
+  if (update) updateQuotePreview();
+}
+
+function convertSavedQuote(quoteId) {
+  const quote = state.quotes.find((item) => item.id === quoteId);
+  if (!quote || quote.status !== "accepted") return;
+  const orderId = nextOrderId();
+  state.orders.push({
+    id: orderId, sellerId: quote.sellerId, seller: quote.seller, client: quote.client,
+    clientPhone: "", clientEmail: "", deliveryAddress: "", product: `${quote.productName} ${quote.variantName}`,
+    quantity: quote.calculation.quantity, source: "taller", requestedDate: iso(7), committedDate: "",
+    requestType: "pedido", referenceImage: "", payment50: false, status: "pedido_planeamiento",
+    notes: `${quote.color}. ${quote.printOption}. ${quote.notes}`.trim(), comment: `Creado desde ${quote.id}. Precio ${money(quote.calculation.unitPrice)} por unidad.`,
+    quoteId: quote.id, quotedUnitPrice: quote.calculation.unitPrice, createdAt: Date.now()
+  });
+  quote.status = "converted";
+  quote.orderId = orderId;
+  quote.updatedAt = Date.now();
+  saveState();
+}
+
+function renderQuoteConfig() {
+  const form = $("#quoteConfigForm");
+  if (!form || currentUser().role !== "direccion") return;
+  Object.entries(state.quoteConfig.costs).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
+  Object.entries(state.quoteConfig.policy).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value; });
+  $("#quoteVariantsTable").innerHTML = `<h3>Productos y variantes</h3><table class="finance-table"><thead><tr><th>SKU</th><th>Producto</th><th>Medida</th><th>Gramaje</th><th>Costo bolsa</th><th>Minimo proveedor</th></tr></thead><tbody>${state.quoteConfig.products.flatMap((product) => product.variants.map((variant) => `<tr><td>${variant.sku}</td><td>${product.name}</td><td>${variant.name}</td><td>${variant.grammage} g</td><td><input class="table-input" type="number" min="0" step="0.01" value="${variant.purchaseCost}" data-variant-cost="${variant.id}" data-product-id="${product.id}"></td><td>${variant.supplierMinimum}</td></tr>`)).join("")}</tbody></table>`;
+}
+
+function saveQuoteConfig(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  Object.keys(state.quoteConfig.costs).forEach((key) => { state.quoteConfig.costs[key] = Number(data[key] || 0); });
+  Object.keys(state.quoteConfig.policy).forEach((key) => { state.quoteConfig.policy[key] = Number(data[key] || 0); });
+  const totalRate = state.quoteConfig.policy.taxRate + state.quoteConfig.policy.commissionRate + state.quoteConfig.policy.targetMarginRate;
+  if (totalRate >= 100 || state.quoteConfig.policy.wasteRate >= 100) {
+    window.alert("Los porcentajes combinados deben ser menores a 100%.");
+    return;
+  }
   saveState();
 }
 

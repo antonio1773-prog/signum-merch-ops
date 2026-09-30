@@ -555,6 +555,107 @@ h3 {
   margin-top: 18px;
 }
 
+.quote-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+  gap: 18px;
+  margin-top: 18px;
+  align-items: start;
+}
+
+.quote-form {
+  display: grid;
+  gap: 14px;
+}
+
+.quote-result {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--green);
+  border-radius: 8px;
+  background: #0b0a0f;
+}
+
+.quote-result.yellow { border-left-color: var(--yellow); }
+.quote-result.red,
+.quote-result.loss { border-left-color: var(--red); }
+
+.quote-result > div {
+  display: grid;
+  gap: 5px;
+}
+
+.quote-result span,
+.quote-result small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.quote-result strong {
+  font-size: 20px;
+}
+
+.quote-result .quote-total strong {
+  color: var(--purple-2);
+  font-size: 26px;
+}
+
+.profit-signal {
+  grid-column: 1 / -1;
+  grid-template-columns: 12px 1fr auto !important;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.profit-signal > span,
+.rent-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.quote-result.yellow .profit-signal > span,
+.rent-dot.yellow { background: var(--yellow); }
+.quote-result.red .profit-signal > span,
+.quote-result.loss .profit-signal > span,
+.rent-dot.red,
+.rent-dot.loss { background: var(--red); }
+
+.quote-breakdown {
+  position: sticky;
+  top: 24px;
+}
+
+.quote-history-panel,
+.quote-admin {
+  margin-top: 18px;
+}
+
+.quote-admin h3:not(:first-child) {
+  margin-top: 22px;
+}
+
+.quote-table {
+  min-width: 980px;
+}
+
+.rent-dot {
+  display: inline-block;
+  margin-right: 7px;
+}
+
+.table-input {
+  min-width: 120px;
+  padding: 8px;
+}
+
 .section-header.compact {
   margin-bottom: 14px;
 }
@@ -1077,8 +1178,13 @@ dialog::backdrop {
   .orders-layout,
   .planning-grid,
   .catalog-grid,
-  .business-layout {
+  .business-layout,
+  .quote-layout {
     grid-template-columns: 1fr;
+  }
+
+  .quote-breakdown {
+    position: static;
   }
 }
 
@@ -1109,7 +1215,8 @@ dialog::backdrop {
   .metrics,
   .business-metrics,
   .pricing-grid,
-  .pricing-preview,
+    .pricing-preview,
+    .quote-result,
   .form-grid,
   .segmented,
   .order-meta {

@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-5" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-6" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -58,6 +58,7 @@
                   <option value="new-order">Cargar pedido</option>
                   <option value="my-orders">Mis pedidos</option>
                   <option value="planning">Planeamiento</option>
+                  <option value="quotes">Cotizador</option>
                   <option value="capacity">Agenda</option>
                   <option value="metrics">Indicadores</option>
                 </select>
@@ -264,6 +265,108 @@
               <div id="dynamicList" class="stack"></div>
             </div>
           </div>
+        </section>
+
+        <section class="view" id="view-quotes" aria-label="Cotizador de trabajos">
+          <div class="section-header">
+            <div>
+              <h2>Cotizador de merchandising</h2>
+              <p>Calcula el precio y la rentabilidad sin exponer la receta completa al vendedor.</p>
+            </div>
+          </div>
+
+          <div class="quote-layout">
+            <form class="panel quote-form" id="quoteForm">
+              <input type="hidden" name="quoteId" />
+              <div class="form-grid">
+                <label class="field">
+                  <span>Cliente</span>
+                  <input name="client" list="clientList" required placeholder="Empresa o contacto" />
+                </label>
+                <label class="field">
+                  <span>Producto</span>
+                  <select name="productId" id="quoteProductSelect"></select>
+                </label>
+                <label class="field">
+                  <span>Medida</span>
+                  <select name="variantId" id="quoteVariantSelect"></select>
+                </label>
+                <label class="field">
+                  <span>Color</span>
+                  <select name="color" id="quoteColorSelect"></select>
+                </label>
+                <label class="field">
+                  <span>Cantidad</span>
+                  <input name="quantity" type="number" min="1" value="100" required />
+                </label>
+                <label class="field">
+                  <span>Tipo de impresion</span>
+                  <select name="printOption" id="quotePrintSelect"></select>
+                </label>
+              </div>
+              <label class="field">
+                <span>Precio unitario negociado</span>
+                <input name="offeredUnitPrice" type="number" min="0" step="0.01" placeholder="Usa el sugerido si queda vacio" />
+              </label>
+              <label class="field">
+                <span>Observaciones</span>
+                <textarea name="notes" rows="3" placeholder="Entrega, arte, condiciones especiales"></textarea>
+              </label>
+              <div class="quote-result" id="quoteResult"></div>
+              <div class="dialog-actions">
+                <button class="ghost-button" id="clearQuoteButton" type="button">Limpiar</button>
+                <button class="primary-button" type="submit">Guardar cotizacion</button>
+              </div>
+            </form>
+
+            <aside class="panel quote-breakdown" id="quoteBreakdown"></aside>
+          </div>
+
+          <div class="panel quote-history-panel">
+            <div class="section-header compact">
+              <div>
+                <h3>Cotizaciones</h3>
+                <p>Historico con costos congelados al momento de guardar.</p>
+              </div>
+            </div>
+            <div class="finance-table-wrap" id="quoteHistory"></div>
+          </div>
+
+          <section class="panel quote-admin is-hidden" id="quoteAdminPanel">
+            <div class="section-header compact">
+              <div>
+                <h3>Costos y precios</h3>
+                <p>Configuracion vigente para nuevas cotizaciones.</p>
+              </div>
+            </div>
+            <form id="quoteConfigForm" class="pricing-form">
+              <h3>Costos generales</h3>
+              <div class="pricing-grid">
+                <label class="field"><span>Papel por bolsa</span><input name="paper" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Tinta por bolsa</span><input name="ink" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Cinta por bolsa</span><input name="tape" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Mano de obra</span><input name="labor" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Electricidad</span><input name="electricity" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Valor hora MO</span><input name="laborHourValue" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Unidades por lote</span><input name="unitsPerBatch" type="number" min="1" step="1" required /></label>
+                <label class="field"><span>Horas por lote</span><input name="hoursPerBatch" type="number" min="0" step="0.1" required /></label>
+                <label class="field"><span>Tinta ml por bolsa</span><input name="inkMlPerUnit" type="number" min="0" step="0.1" required /></label>
+                <label class="field"><span>Cinta cm por bolsa</span><input name="tapeCmPerUnit" type="number" min="0" step="0.1" required /></label>
+              </div>
+              <h3>Maquinaria y politica comercial</h3>
+              <div class="pricing-grid">
+                <label class="field"><span>Amort. impresora</span><input name="printerDepreciation" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Amort. plancha</span><input name="pressDepreciation" type="number" min="0" step="0.01" required /></label>
+                <label class="field"><span>Merma %</span><input name="wasteRate" type="number" min="0" max="99" step="0.01" required /></label>
+                <label class="field"><span>Impuestos %</span><input name="taxRate" type="number" min="0" max="99" step="0.01" required /></label>
+                <label class="field"><span>Comision vendedor %</span><input name="commissionRate" type="number" min="0" max="99" step="0.01" required /></label>
+                <label class="field"><span>Margen objetivo %</span><input name="targetMarginRate" type="number" min="0" max="99" step="0.01" required /></label>
+                <label class="field"><span>Multiplo redondeo</span><input name="roundingMultiple" type="number" min="1" step="1" required /></label>
+              </div>
+              <button class="primary-button" type="submit">Guardar configuracion</button>
+            </form>
+            <div class="finance-table-wrap" id="quoteVariantsTable"></div>
+          </section>
         </section>
 
         <section class="view" id="view-capacity" aria-label="Agenda">
@@ -573,6 +676,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
+    <script src="./pricing-engine.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
