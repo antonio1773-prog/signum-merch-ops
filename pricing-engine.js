@@ -6,31 +6,38 @@
   const number = (value) => Number(value || 0);
   const roundMoney = (value) => Math.round((number(value) + Number.EPSILON) * 100) / 100;
 
-  function calculateUnitCost(variant, config) {
+  function calculateUnitCost(variant, config, printOption = {}) {
     const costs = config.costs;
+    const includeProduction = printOption.includeProduction !== false;
+    const appliedCosts = {
+      paper: includeProduction ? number(costs.paper) : 0,
+      ink: includeProduction ? number(costs.ink) : 0,
+      tape: includeProduction ? number(costs.tape) : 0,
+      labor: includeProduction ? number(costs.labor) : 0,
+      printerDepreciation: includeProduction ? number(costs.printerDepreciation) : 0,
+      pressDepreciation: includeProduction ? number(costs.pressDepreciation) : 0,
+      electricity: includeProduction ? number(costs.electricity) : 0
+    };
     const subtotal =
       number(variant.purchaseCost) +
-      number(costs.paper) +
-      number(costs.ink) +
-      number(costs.tape) +
-      number(costs.labor) +
-      number(costs.printerDepreciation) +
-      number(costs.pressDepreciation);
+      appliedCosts.paper + appliedCosts.ink + appliedCosts.tape + appliedCosts.labor +
+      appliedCosts.printerDepreciation + appliedCosts.pressDepreciation;
     const wasteRate = number(config.policy.wasteRate) / 100;
     const costWithWaste = subtotal / (1 - wasteRate);
     const wasteAmount = costWithWaste - subtotal;
-    const unitCost = costWithWaste + number(costs.electricity);
+    const unitCost = costWithWaste + appliedCosts.electricity;
     return {
       subtotal: roundMoney(subtotal),
       costWithWaste: roundMoney(costWithWaste),
       wasteAmount: roundMoney(wasteAmount),
       unitCost: roundMoney(unitCost),
-      unitCostRaw: unitCost
+      unitCostRaw: unitCost,
+      appliedCosts
     };
   }
 
-  function calculateQuote(variant, config, quantity, offeredUnitPrice) {
-    const unit = calculateUnitCost(variant, config);
+  function calculateQuote(variant, config, quantity, offeredUnitPrice, printOption = {}) {
+    const unit = calculateUnitCost(variant, config, printOption);
     const policy = config.policy;
     const outsideRate = (number(policy.taxRate) + number(policy.commissionRate) + number(policy.targetMarginRate)) / 100;
     const technicalPrice = unit.unitCostRaw / (1 - outsideRate);

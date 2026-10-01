@@ -45,7 +45,10 @@ const seedState = {
     products: [{
       id: "friselina-sublimada", name: "Bolsas de friselina sublimadas", material: "Friselina 80 g",
       colors: ["Blanco", "Beige", "Negro"], active: true,
-      printOptions: [{ id: "standard-one-side", name: "Estampa estandar - una cara", costMultiplier: 1 }],
+      printOptions: [
+        { id: "standard-one-side", name: "Sublimada - estampa estandar una cara", includeProduction: true },
+        { id: "plain", name: "Sin sublimar", includeProduction: false }
+      ],
       variants: [
         ["BOL-302010", "30x20x10", 30, 20, 10, 137.41, 2500], ["BOL-303010", "30x30x10", 30, 30, 10, 221.41, 1000],
         ["BOL-392010", "39x20x10", 39, 20, 10, 156.94, 2500], ["BOL-403010", "40x30x10", 40, 30, 10, 262.10, 1000],
@@ -255,6 +258,15 @@ function normalizeState(rawState) {
   parsed.quoteConfig.costs = { ...structuredClone(seedState.quoteConfig.costs), ...(parsed.quoteConfig.costs || {}) };
   parsed.quoteConfig.policy = { ...structuredClone(seedState.quoteConfig.policy), ...(parsed.quoteConfig.policy || {}) };
   parsed.quoteConfig.products ||= structuredClone(seedState.quoteConfig.products);
+  parsed.quoteConfig.products.forEach((product) => {
+    const defaultProduct = seedState.quoteConfig.products.find((item) => item.id === product.id);
+    product.printOptions ||= [];
+    (defaultProduct?.printOptions || []).forEach((option) => {
+      const existing = product.printOptions.find((item) => item.id === option.id);
+      if (existing) Object.assign(existing, { ...option, ...existing });
+      else product.printOptions.push(structuredClone(option));
+    });
+  });
   parsed.quotes ||= [];
   parsed.products ||= structuredClone(seedState.products);
   parsed.dynamics ||= structuredClone(seedState.dynamics);
@@ -1476,15 +1488,18 @@ function renderQuoteSelectors() {
 
 function quoteCalculationFromForm() {
   const form = $("#quoteForm");
+  const product = activeQuoteProduct();
   const variant = activeQuoteVariant();
   if (!variant) return null;
-  return SignumPricing.calculateQuote(variant, state.quoteConfig, form.quantity.value, form.offeredUnitPrice.value);
+  const printOption = product?.printOptions.find((option) => option.id === form.printOption.value) || {};
+  return SignumPricing.calculateQuote(variant, state.quoteConfig, form.quantity.value, form.offeredUnitPrice.value, printOption);
 }
 
 function updateQuotePreview() {
   if (!$("#quoteResult")) return;
   const calculation = quoteCalculationFromForm();
   const variant = activeQuoteVariant();
+  const costs = calculation?.appliedCosts;
   if (!calculation || !variant) return;
   const trafficLabel = calculation.profitability === "green" ? "Rentabilidad saludable" : calculation.profitability === "yellow" ? "Rentabilidad a revisar" : calculation.profitability === "loss" ? "OPERACION CON PERDIDA" : "Rentabilidad baja";
   $("#quoteResult").className = `quote-result ${calculation.profitability}`;
@@ -1500,13 +1515,13 @@ function updateQuotePreview() {
     <h3>Detalle interno</h3>
     <div class="business-summary">
       <div class="summary-row"><span>Bolsa virgen</span><strong>${money(variant.purchaseCost)}</strong></div>
-      <div class="summary-row"><span>Papel</span><strong>${money(state.quoteConfig.costs.paper)}</strong></div>
-      <div class="summary-row"><span>Tinta</span><strong>${money(state.quoteConfig.costs.ink)}</strong></div>
-      <div class="summary-row"><span>Cinta</span><strong>${money(state.quoteConfig.costs.tape)}</strong></div>
-      <div class="summary-row"><span>Mano de obra</span><strong>${money(state.quoteConfig.costs.labor)}</strong></div>
-      <div class="summary-row"><span>Amortizaciones</span><strong>${money(state.quoteConfig.costs.printerDepreciation + state.quoteConfig.costs.pressDepreciation)}</strong></div>
+      <div class="summary-row"><span>Papel</span><strong>${money(costs.paper)}</strong></div>
+      <div class="summary-row"><span>Tinta</span><strong>${money(costs.ink)}</strong></div>
+      <div class="summary-row"><span>Cinta</span><strong>${money(costs.tape)}</strong></div>
+      <div class="summary-row"><span>Mano de obra</span><strong>${money(costs.labor)}</strong></div>
+      <div class="summary-row"><span>Amortizaciones</span><strong>${money(costs.printerDepreciation + costs.pressDepreciation)}</strong></div>
       <div class="summary-row"><span>Merma</span><strong>${money(calculation.wasteAmount)}</strong></div>
-      <div class="summary-row"><span>Electricidad</span><strong>${money(state.quoteConfig.costs.electricity)}</strong></div>
+      <div class="summary-row"><span>Electricidad</span><strong>${money(costs.electricity)}</strong></div>
       <div class="summary-row total"><span>Costo unitario</span><strong>${money(calculation.unitCost)}</strong></div>
       <div class="summary-row"><span>Precio tecnico</span><strong>${money(calculation.technicalPrice)}</strong></div>
       <div class="summary-row"><span>Impuestos</span><strong>${money(calculation.taxes)}</strong></div>

@@ -14,4 +14,11 @@ assert.equal(result.technicalPrice, 1349.26);
 assert.equal(result.suggestedPrice, 1350);
 assert.equal(result.saleTotal, 135000);
 assert.equal(result.commission, 27000);
+
+const plain = calculateQuote({ purchaseCost: 262.10 }, config, 100, "", { includeProduction: false });
+assert.equal(plain.subtotal, 262.10);
+assert.equal(plain.unitCost, 270.21);
+assert.equal(plain.appliedCosts.labor, 0);
+assert.equal(plain.appliedCosts.electricity, 0);
+assert.equal(plain.suggestedPrice, 400);
 console.log("Cotizador OK: caso 40x30x10 verificado.");
