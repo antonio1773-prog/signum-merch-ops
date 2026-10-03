@@ -287,6 +287,8 @@ function normalizeState(rawState) {
     clientEmail: "",
     deliveryAddress: "",
     referenceImage: "",
+    referenceFileName: "",
+    referenceFileType: "",
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
   }));
@@ -427,6 +429,26 @@ function readImage(file) {
     reader.onerror = () => resolve("");
     reader.readAsDataURL(file);
   });
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character]);
+}
+
+function attachmentTemplate(order) {
+  if (!order.referenceImage) return "";
+  const fileName = escapeHtml(order.referenceFileName || "referencia");
+  const fileType = order.referenceFileType || (order.referenceImage.startsWith("data:image/") ? "image/legacy" : "");
+  if (fileType.startsWith("image/")) {
+    return `
+      <div class="reference-file">
+        <img class="reference-thumb" src="${order.referenceImage}" alt="Logo o referencia de ${escapeHtml(order.client)}" />
+        <a class="attachment-link" href="${order.referenceImage}" download="${fileName}">Descargar ${fileName}</a>
+      </div>`;
+  }
+  return `<a class="attachment-link attachment-document" href="${order.referenceImage}" download="${fileName}">Archivo adjunto: ${fileName}</a>`;
 }
 
 function setup() {
@@ -797,6 +819,7 @@ function orderMatrixTemplate(orders) {
             <th>Fecha ideal</th>
             <th>Entrega</th>
             <th>Notas</th>
+            <th>Archivo</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -827,6 +850,7 @@ function matrixRowTemplate(order) {
       <td>${formatDate(order.requestedDate)}</td>
       <td>${formatDate(order.committedDate)}</td>
       <td class="notes-cell">${order.notes || order.comment || "-"}</td>
+      <td>${attachmentTemplate(order) || `<span class="meta">Sin archivo</span>`}</td>
       <td><div class="matrix-actions">${actions || `<span class="meta">Sin accion</span>`}</div></td>
     </tr>
   `;
@@ -855,7 +879,7 @@ function orderTemplate(order, mode) {
       </div>
       <p class="meta"><strong>Contacto:</strong> ${contact}</p>
       <p class="meta"><strong>Direccion entrega:</strong> ${order.deliveryAddress || "Sin direccion cargada"}</p>
-      ${order.referenceImage ? `<img class="reference-thumb" src="${order.referenceImage}" alt="Logo o referencia de ${order.client}" />` : ""}
+      ${attachmentTemplate(order)}
       ${order.notes ? `<p class="meta">${order.notes}</p>` : ""}
       ${order.comment ? `<p class="meta"><strong>Comentario:</strong> ${order.comment}</p>` : ""}
       ${user.role === "vendedor" && order.status === "presupuesto_respondido" ? `<button class="primary-button" type="button" data-convert="${order.id}">Convertir en pedido</button>` : ""}
@@ -1220,7 +1244,8 @@ async function createOrder(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const product = state.products.find((item) => item.name === data.product);
-  const referenceImage = await readImage(form.referenceImage.files[0]);
+  const referenceFile = form.referenceImage.files[0];
+  const referenceImage = await readImage(referenceFile);
   upsertClient(data.client, data.clientPhone, data.clientEmail);
   state.orders.push({
     id: nextOrderId(),
@@ -1237,6 +1262,8 @@ async function createOrder(event) {
     committedDate: "",
     requestType: data.requestType,
     referenceImage,
+    referenceFileName: referenceFile?.name || "",
+    referenceFileType: referenceFile?.type || "",
     payment50: false,
     status: data.requestType === "pedido" ? "pedido_planeamiento" : "presupuesto_planeamiento",
     notes: data.notes,

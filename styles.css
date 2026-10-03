@@ -941,6 +941,32 @@ h3 {
   padding: 8px;
 }
 
+.reference-file {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.attachment-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--purple-2);
+  font-size: 13px;
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.attachment-document {
+  width: fit-content;
+  max-width: 100%;
+  padding: 9px 11px;
+  border: 1px solid rgba(122, 92, 250, 0.42);
+  border-radius: 8px;
+  background: rgba(122, 92, 250, 0.1);
+  overflow-wrap: anywhere;
+}
+
 .order-head {
   display: flex;
   justify-content: space-between;
