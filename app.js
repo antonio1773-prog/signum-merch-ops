@@ -27,9 +27,9 @@ const seedState = {
     { id: uid(), name: "Hotel Acacia", phone: "+54 223 512-9044", email: "eventos@hotelacacia.com", active: true }
   ],
   products: [
-    { id: uid(), name: "Remera premium bordada", price: 14800, minimum: 25, source: "taller", leadTime: 6, active: true },
-    { id: uid(), name: "Gorra trucker personalizada", price: 9700, minimum: 50, source: "fabrica", leadTime: 10, active: true },
-    { id: uid(), name: "Kit bienvenida corporativo", price: 42500, minimum: 20, source: "taller", leadTime: 8, active: true }
+    { id: uid(), productCode: "REM-001", name: "Remera premium bordada", price: 14800, minimum: 25, source: "taller", leadTime: 6, active: true },
+    { id: uid(), productCode: "GOR-001", name: "Gorra trucker personalizada", price: 9700, minimum: 50, source: "fabrica", leadTime: 10, active: true },
+    { id: uid(), productCode: "KIT-001", name: "Kit bienvenida corporativo", price: 42500, minimum: 20, source: "taller", leadTime: 8, active: true }
   ],
   dynamics: [
     { id: uid(), title: "Prioridad onboarding Q4", description: "Kits bienvenida con cupo preferencial hasta agotar 300 unidades.", priority: "alta", expires: iso(2), active: true },
@@ -175,6 +175,7 @@ const viewTitles = {
   "my-orders": "Pedidos realizados",
   workflow: "Gestion de pedidos",
   planning: "Productos y dinamicas",
+  stock: "Compras y stock",
   quotes: "Cotizador de trabajos",
   capacity: "Agenda de produccion",
   metrics: "Indicadores",
@@ -186,6 +187,7 @@ const viewTitles = {
 const tabs = {
   workflow: "Gestion",
   planning: "Planeamiento",
+  stock: "Compras y stock",
   quotes: "Cotizador",
   capacity: "Agenda",
   metrics: "Indicadores",
@@ -206,6 +208,7 @@ const statusLabels = {
   logistica: "En logistica",
   entregado: "Entregado",
   cancelado: "Cancelado por vendedor",
+  devolucion: "Devolucion",
   rechazado: "Rechazado"
 };
 
@@ -222,6 +225,7 @@ const statusOptions = [
   ["logistica", "En logistica"],
   ["entregado", "Entregado"],
   ["cancelado", "Cancelados"],
+  ["devolucion", "Devoluciones"],
   ["rechazado", "Rechazado"]
 ];
 
@@ -269,6 +273,7 @@ function normalizeState(rawState) {
   });
   parsed.quotes ||= [];
   parsed.products ||= structuredClone(seedState.products);
+  parsed.products = parsed.products.map((product) => ({ productCode: "", ...product }));
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.finance ||= structuredClone(seedState.finance);
   parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
@@ -289,6 +294,8 @@ function normalizeState(rawState) {
     referenceImage: "",
     referenceFileName: "",
     referenceFileType: "",
+    stockCode: "",
+    inventoryState: "",
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
   }));
@@ -481,6 +488,7 @@ function setup() {
   $("#userForm").addEventListener("submit", createUser);
   $("#capitalForm").addEventListener("submit", updateCapital);
   $("#financeForm").addEventListener("submit", createFinanceTransaction);
+  $("#purchaseForm").addEventListener("submit", createPurchase);
   $("#pricingForm").addEventListener("submit", createPricing);
   $("#pricingForm").addEventListener("input", updatePricingPreview);
   $("#quoteForm").addEventListener("input", updateQuotePreview);
@@ -508,6 +516,7 @@ function setup() {
   $("#orderForm input[name='requestedDate']").value = iso(7);
   $("#dynamicForm input[name='expires']").value = iso(1);
   $("#financeForm input[name='date']").value = iso(0);
+  $("#purchaseForm input[name='date']").value = iso(0);
   render();
   initializeRemoteState();
 }
@@ -556,7 +565,7 @@ function render() {
   const user = currentUser();
   if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "quotes", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
   if (user.role !== "vendedor" && ["new-order", "my-orders"].includes(activeView)) activeView = "workflow";
-  if (user.role !== "direccion" && ["crm", "users", "business"].includes(activeView)) activeView = "workflow";
+  if (user.role !== "direccion" && ["crm", "users", "business", "stock"].includes(activeView)) activeView = "workflow";
 
   $("#roleEyebrow").textContent = `${user.name} · ${roleLabels[user.role]}`;
   $("#pageTitle").textContent = viewTitles[activeView];
@@ -578,6 +587,7 @@ function render() {
   renderCalendar();
   renderMetrics();
   renderBusiness();
+  renderStock();
   renderQuotes();
 }
 
@@ -601,7 +611,7 @@ function renderNav() {
   if (user.role === "vendedor") return;
   const roleTabs =
     user.role === "direccion"
-      ? ["workflow", "quotes", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
+      ? ["workflow", "quotes", "stock", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
       : user.role === "planeamiento"
         ? ["workflow", "quotes", "planning", "capacity", "metrics"]
         : ["workflow", "planning", "capacity", "metrics"];
@@ -621,6 +631,31 @@ function canEditPlanning() {
   return ["planeamiento", "direccion"].includes(currentUser().role);
 }
 
+function cleanProductCode(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function inventoryFor(productCode) {
+  const code = cleanProductCode(productCode);
+  const purchases = (state.finance?.transactions || []).filter((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
+  const purchased = purchases.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  const reserved = state.orders
+    .filter((order) => cleanProductCode(order.stockCode) === code && order.inventoryState === "reserved")
+    .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+  const consumed = state.orders
+    .filter((order) => cleanProductCode(order.stockCode) === code && order.inventoryState === "consumed")
+    .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
+  return { purchased, reserved, consumed, available: Math.max(0, purchased - reserved - consumed) };
+}
+
+function releaseOrderStock(order) {
+  if (order.inventoryState === "reserved") order.inventoryState = "released";
+}
+
+function consumeOrderStock(order) {
+  if (order.inventoryState === "reserved") order.inventoryState = "consumed";
+}
+
 function visibleOrders(scope = "list") {
   const user = currentUser();
   if (user.role === "vendedor") return state.orders.filter((order) => order.sellerId === user.id);
@@ -632,9 +667,10 @@ function visibleOrders(scope = "list") {
 }
 
 function renderProducts() {
-  const activeProducts = state.products.filter((product) => product.active);
+  const sellerView = currentUser().role === "vendedor";
+  const activeProducts = state.products.filter((product) => product.active && (!sellerView || inventoryFor(product.productCode).available > 0));
   $("#productSelect").innerHTML = activeProducts
-    .map((product) => `<option value="${product.name}" data-source="${product.source}">${product.name} - ${money(product.price)}</option>`)
+    .map((product) => `<option value="${product.name}" data-source="${product.source}">${product.name} - ${money(product.price)} · ${inventoryFor(product.productCode).available} disponibles</option>`)
     .join("");
 
   $("#productList").innerHTML = activeProducts.length
@@ -647,7 +683,12 @@ function renderProducts() {
                 <span class="badge neutral">${product.source === "taller" ? "Taller" : "Fabrica"}</span>
               </header>
               <p>${money(product.price)} · minimo ${product.minimum} · ${product.leadTime} dias</p>
-              ${canEditPlanning() ? `<button class="small-button" type="button" data-remove-product="${product.id}">Pausar</button>` : ""}
+              <p class="meta">Codigo ${product.productCode || "sin vincular"} · stock disponible ${inventoryFor(product.productCode).available}</p>
+              ${canEditPlanning() ? `<div class="card-actions">
+                <input class="table-input product-code-input" value="${escapeHtml(product.productCode)}" list="purchaseCodeList" placeholder="Codigo stock" data-product-code="${product.id}" />
+                <button class="small-button" type="button" data-link-product="${product.id}">Vincular stock</button>
+                <button class="small-button" type="button" data-remove-product="${product.id}">Pausar</button>
+              </div>` : ""}
             </article>
           `
         )
@@ -658,6 +699,15 @@ function renderProducts() {
     button.addEventListener("click", () => {
       const product = state.products.find((item) => item.id === button.dataset.removeProduct);
       product.active = false;
+      saveState();
+    });
+  });
+  $$("[data-link-product]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const product = state.products.find((item) => item.id === button.dataset.linkProduct);
+      const input = $(`[data-product-code="${button.dataset.linkProduct}"]`);
+      product.productCode = cleanProductCode(input.value);
+      recalculatePricingForCode(product.productCode);
       saveState();
     });
   });
@@ -889,7 +939,7 @@ function orderTemplate(order, mode) {
 }
 
 function badgeClass(status) {
-  if (["rechazado", "cancelado"].includes(status)) return "rechazado";
+  if (["rechazado", "cancelado", "devolucion"].includes(status)) return "rechazado";
   if (["fecha_confirmada", "produccion", "logistica", "entregado", "presupuesto_respondido"].includes(status)) return "aprobado";
   if (status === "esperando_senia") return "payment";
   return "enviado";
@@ -901,31 +951,33 @@ function actionButtons(order, mode) {
     return `<button class="small-button danger-inline" type="button" data-cancel-order="${order.id}">Cancelar pedido</button>`;
   }
   if (mode !== "workflow" && role !== "direccion") return "";
+  let action = "";
   if (["planeamiento", "direccion"].includes(role)) {
     if (["pedido_planeamiento", "presupuesto_planeamiento"].includes(order.status)) {
-      return `<button class="small-button" type="button" data-planning="${order.id}">Resolver en planeamiento</button>`;
+      action = `<button class="small-button" type="button" data-planning="${order.id}">Resolver en planeamiento</button>`;
     }
-    if (order.status === "esperando_senia") {
-      return `<button class="small-button" type="button" data-pay="${order.id}">Confirmar sena 50%</button>`;
+    if (!action && order.status === "esperando_senia") {
+      action = `<button class="small-button" type="button" data-pay="${order.id}">Confirmar sena 50%</button>`;
     }
-    if (order.status === "fabrica_fecha_planeamiento") {
-      return `<button class="small-button" type="button" data-date="${order.id}">Responder fecha fabrica</button>`;
+    if (!action && order.status === "fabrica_fecha_planeamiento") {
+      action = `<button class="small-button" type="button" data-date="${order.id}">Responder fecha fabrica</button>`;
     }
   }
-  if (["taller", "direccion"].includes(role) && order.status === "taller_fecha") {
-    return `<button class="small-button" type="button" data-date="${order.id}">Asignar fecha taller</button>`;
+  if (!action && ["taller", "direccion"].includes(role) && order.status === "taller_fecha") {
+    action = `<button class="small-button" type="button" data-date="${order.id}">Asignar fecha taller</button>`;
   }
-  if (["taller", "fabrica", "direccion"].includes(role) && ["fecha_confirmada", "produccion"].includes(order.status)) {
+  if (!action && ["taller", "fabrica", "direccion"].includes(role) && ["fecha_confirmada", "produccion"].includes(order.status)) {
     const nextStatus = order.status === "fecha_confirmada" ? "produccion" : "logistica";
-    return `<button class="small-button" type="button" data-progress="${order.id}" data-next-status="${nextStatus}">${nextStatus === "produccion" ? "Pasar a produccion" : "Enviar a logistica"}</button>`;
+    action = `<button class="small-button" type="button" data-progress="${order.id}" data-next-status="${nextStatus}">${nextStatus === "produccion" ? "Pasar a produccion" : "Enviar a logistica"}</button>`;
   }
-  if (["logistica", "direccion"].includes(role) && order.status === "logistica") {
-    return `
+  if (!action && ["logistica", "direccion"].includes(role) && order.status === "logistica") {
+    action = `
       <button class="small-button" type="button" data-date="${order.id}">Asignar fecha entrega</button>
       <button class="small-button" type="button" data-deliver="${order.id}">Marcar entregado</button>
     `;
   }
-  return "";
+  const canCancel = role === "direccion" && !["entregado", "rechazado", "cancelado", "devolucion"].includes(order.status);
+  return `${action}${canCancel ? `<button class="small-button danger-inline" type="button" data-direction-cancel="${order.id}">${["produccion", "logistica"].includes(order.status) ? "Registrar devolucion" : "Cancelar y liberar stock"}</button>` : ""}`;
 }
 
 function canSellerCancel(order) {
@@ -941,6 +993,9 @@ function attachOrderActions() {
   $$("[data-cancel-order]").forEach((button) => {
     button.addEventListener("click", () => cancelOrder(button.dataset.cancelOrder));
   });
+  $$("[data-direction-cancel]").forEach((button) => {
+    button.addEventListener("click", () => cancelOrderByDirection(button.dataset.directionCancel));
+  });
   $$("[data-deliver]").forEach((button) => {
     button.addEventListener("click", () => {
       const order = state.orders.find((item) => item.id === button.dataset.deliver);
@@ -953,6 +1008,7 @@ function attachOrderActions() {
     button.addEventListener("click", () => {
       const order = state.orders.find((item) => item.id === button.dataset.progress);
       order.status = button.dataset.nextStatus;
+      if (order.status === "produccion") consumeOrderStock(order);
       order.comment = order.status === "produccion" ? "Produccion iniciada." : "Pedido terminado. Logistica debe coordinar la entrega.";
       saveState();
     });
@@ -1049,6 +1105,25 @@ function purchaseUnitCost(productCode) {
   return totalQuantity > 0 ? totalAmount / totalQuantity : totalAmount;
 }
 
+function recalculatePricingForCode(productCode) {
+  const code = cleanProductCode(productCode);
+  const purchaseCost = purchaseUnitCost(code);
+  const matching = (state.finance?.pricing || []).filter((item) => cleanProductCode(item.productCode) === code);
+  matching.forEach((item) => {
+    item.purchaseCost = purchaseCost;
+    const baseCost = Number(item.manualCost || 0) || purchaseCost;
+    item.subtotal = baseCost + Number(item.productionCost || 0) + Number(item.sublimationSheet || 0) + Number(item.machineWear || 0) + Number(item.labor || 0) + Number(item.design || 0) + Number(item.electricity || 0) + Number(item.seller1 || 0) + Number(item.seller2 || 0);
+    item.ivaAmount = item.iva ? item.subtotal * 0.21 : 0;
+    item.total = item.subtotal + item.ivaAmount;
+  });
+  const latest = [...matching].sort((a, b) => b.createdAt - a.createdAt)[0];
+  if (latest) {
+    state.products
+      .filter((product) => cleanProductCode(product.productCode) === code)
+      .forEach((product) => { product.price = latest.total; });
+  }
+}
+
 function pricingFromForm(form) {
   const data = Object.fromEntries(new FormData(form));
   const productCode = String(data.productCode || "").trim().toUpperCase();
@@ -1084,6 +1159,56 @@ function pricingFromForm(form) {
     ivaAmount,
     total: subtotal + ivaAmount
   };
+}
+
+function renderStock() {
+  if (!$("#stockTable")) return;
+  const purchases = [...(state.finance?.transactions || [])]
+    .filter((item) => item.type === "compra" && item.productCode)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.createdAt - a.createdAt);
+  const codes = [...new Set([
+    ...purchases.map((item) => cleanProductCode(item.productCode)),
+    ...state.products.map((product) => cleanProductCode(product.productCode)).filter(Boolean)
+  ])];
+  const totals = codes.reduce((result, code) => {
+    const stock = inventoryFor(code);
+    result.purchased += stock.purchased;
+    result.reserved += stock.reserved;
+    result.consumed += stock.consumed;
+    result.available += stock.available;
+    return result;
+  }, { purchased: 0, reserved: 0, consumed: 0, available: 0 });
+
+  $("#stockSummary").innerHTML = `
+    <div class="summary-row"><span>Unidades ingresadas</span><strong>${totals.purchased}</strong></div>
+    <div class="summary-row"><span>Reservadas por pedidos</span><strong>${totals.reserved}</strong></div>
+    <div class="summary-row"><span>Consumidas en produccion</span><strong>${totals.consumed}</strong></div>
+    <div class="summary-row total"><span>Disponibles para vender</span><strong>${totals.available}</strong></div>`;
+
+  $("#stockTable").innerHTML = codes.length ? `
+    <table class="finance-table">
+      <thead><tr><th>Codigo</th><th>Descripcion</th><th>Comprado</th><th>Reservado</th><th>Consumido</th><th>Disponible</th><th>Costo promedio</th><th>Costo + variables</th><th>Productos publicados</th></tr></thead>
+      <tbody>${codes.map((code) => {
+        const stock = inventoryFor(code);
+        const purchase = purchases.find((item) => cleanProductCode(item.productCode) === code);
+        const linked = state.products.filter((product) => cleanProductCode(product.productCode) === code && product.active);
+        const pricing = [...(state.finance?.pricing || [])].filter((item) => cleanProductCode(item.productCode) === code).sort((a, b) => b.createdAt - a.createdAt)[0];
+        return `<tr>
+          <td><strong>${escapeHtml(code)}</strong></td>
+          <td>${escapeHtml(purchase?.productDescription || linked[0]?.name || "-")}</td>
+          <td class="number-cell">${stock.purchased}</td><td class="number-cell">${stock.reserved}</td><td class="number-cell">${stock.consumed}</td>
+          <td class="number-cell ${stock.available > 0 ? "stock-positive" : "stock-zero"}">${stock.available}</td>
+          <td class="number-cell">${money(purchaseUnitCost(code))}</td>
+          <td class="number-cell">${pricing ? money(pricing.total) : "Sin pricing"}</td>
+          <td>${linked.length ? linked.map((product) => escapeHtml(product.name)).join("<br>") : "Sin vincular"}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>` : `<div class="empty-state">Todavia no hay compras con codigo y cantidad.</div>`;
+
+  $("#purchaseTable").innerHTML = purchases.length ? `
+    <table class="finance-table"><thead><tr><th>Fecha</th><th>Codigo</th><th>Descripcion</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th><th>Proveedor</th><th>Factura</th></tr></thead>
+    <tbody>${purchases.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.productCode)}</strong></td><td>${escapeHtml(item.productDescription)}</td><td class="number-cell">${item.quantity}</td><td class="number-cell">${money(Number(item.amount || 0) / Math.max(1, Number(item.quantity || 0)))}</td><td class="number-cell">${money(item.amount)}</td><td>${escapeHtml(item.reference || "-")}</td><td>${item.invoiceImage ? `<a class="invoice-link" href="${item.invoiceImage}" target="_blank" rel="noreferrer">Ver factura</a>` : "-"}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty-state">No hay compras cargadas.</div>`;
 }
 
 function renderBusiness() {
@@ -1160,7 +1285,9 @@ function renderBusiness() {
 
   $$("[data-remove-finance]").forEach((button) => {
     button.addEventListener("click", () => {
+      const removed = state.finance.transactions.find((item) => item.id === button.dataset.removeFinance);
       state.finance.transactions = state.finance.transactions.filter((item) => item.id !== button.dataset.removeFinance);
+      if (removed?.type === "compra") recalculatePricingForCode(removed.productCode);
       saveState();
     });
   });
@@ -1244,6 +1371,17 @@ async function createOrder(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const product = state.products.find((item) => item.name === data.product);
+  const quantity = Number(data.quantity || 0);
+  const isOrder = data.requestType === "pedido";
+  if (!product) {
+    alert("Selecciona un producto con stock disponible.");
+    return;
+  }
+  if (isOrder && inventoryFor(product.productCode).available < quantity) {
+    alert(`Stock insuficiente. Hay ${inventoryFor(product.productCode).available} unidades disponibles.`);
+    renderProducts();
+    return;
+  }
   const referenceFile = form.referenceImage.files[0];
   const referenceImage = await readImage(referenceFile);
   upsertClient(data.client, data.clientPhone, data.clientEmail);
@@ -1256,8 +1394,10 @@ async function createOrder(event) {
     clientEmail: data.clientEmail,
     deliveryAddress: data.deliveryAddress,
     product: data.product,
-    quantity: Number(data.quantity),
+    quantity,
     source: product?.source || "taller",
+    stockCode: cleanProductCode(product.productCode),
+    inventoryState: isOrder ? "reserved" : "",
     requestedDate: data.requestedDate,
     committedDate: "",
     requestType: data.requestType,
@@ -1265,7 +1405,7 @@ async function createOrder(event) {
     referenceFileName: referenceFile?.name || "",
     referenceFileType: referenceFile?.type || "",
     payment50: false,
-    status: data.requestType === "pedido" ? "pedido_planeamiento" : "presupuesto_planeamiento",
+    status: isOrder ? "pedido_planeamiento" : "presupuesto_planeamiento",
     notes: data.notes,
     comment: "",
     createdAt: Date.now()
@@ -1296,6 +1436,7 @@ function createProduct(event) {
   const data = Object.fromEntries(new FormData(event.currentTarget));
   state.products.push({
     id: uid(),
+    productCode: cleanProductCode(data.productCode),
     name: data.name,
     price: Number(data.price),
     minimum: Number(data.minimum),
@@ -1377,6 +1518,31 @@ async function createFinanceTransaction(event) {
     invoiceImage,
     createdAt: Date.now()
   });
+  if (data.type === "compra") recalculatePricingForCode(data.productCode);
+  form.reset();
+  form.date.value = iso(0);
+  saveState();
+}
+
+async function createPurchase(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const invoiceImage = await readImage(form.invoiceImage.files[0]);
+  state.finance.transactions.push({
+    id: uid(),
+    type: "compra",
+    amount: Number(data.amount || 0),
+    quantity: Number(data.quantity || 0),
+    productCode: cleanProductCode(data.productCode),
+    productDescription: data.productDescription,
+    date: data.date,
+    reference: data.reference,
+    description: data.description,
+    invoiceImage,
+    createdAt: Date.now()
+  });
+  recalculatePricingForCode(data.productCode);
   form.reset();
   form.date.value = iso(0);
   saveState();
@@ -1390,6 +1556,7 @@ function createPricing(event) {
     ...pricing,
     createdAt: Date.now()
   });
+  recalculatePricingForCode(pricing.productCode);
   event.currentTarget.reset();
   ["productionCost", "sublimationSheet", "machineWear", "labor", "design", "electricity", "seller1", "seller2"].forEach((name) => {
     event.currentTarget[name].value = 0;
@@ -1417,6 +1584,7 @@ function resolvePlanningDecision(event) {
   order.comment = data.comment;
   if (action === "reject") {
     order.status = "rechazado";
+    releaseOrderStock(order);
   } else if (order.requestType === "presupuesto") {
     order.status = "presupuesto_respondido";
   } else {
@@ -1440,8 +1608,28 @@ function cancelOrder(orderId) {
   if (!order || !canSellerCancel(order)) return;
   const confirmed = window.confirm(`Cancelar ${order.id}?`);
   if (!confirmed) return;
+  releaseOrderStock(order);
   order.status = "cancelado";
   order.comment = "Cancelado por el vendedor.";
+  saveState();
+}
+
+function cancelOrderByDirection(orderId) {
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) return;
+  const afterProduction = ["produccion", "logistica"].includes(order.status) || order.inventoryState === "consumed";
+  const confirmed = window.confirm(afterProduction
+    ? `Registrar ${order.id} como devolucion? El stock consumido no volvera a estar disponible.`
+    : `Cancelar ${order.id} y liberar el stock reservado?`);
+  if (!confirmed) return;
+  if (afterProduction) {
+    order.status = "devolucion";
+    order.comment = "Cancelado despues de iniciar produccion. Registrado como devolucion sin reingreso de stock.";
+  } else {
+    releaseOrderStock(order);
+    order.status = "cancelado";
+    order.comment = "Cancelado por Direccion. Stock reservado liberado.";
+  }
   saveState();
 }
 
@@ -1473,7 +1661,14 @@ function resolveDate(event) {
 
 function convertQuote(orderId) {
   const order = state.orders.find((item) => item.id === orderId);
+  const product = state.products.find((item) => item.name === order.product);
+  if (!product || inventoryFor(product.productCode).available < Number(order.quantity || 0)) {
+    alert("No hay stock suficiente para convertir este presupuesto en pedido.");
+    return;
+  }
   order.requestType = "pedido";
+  order.stockCode = cleanProductCode(product.productCode);
+  order.inventoryState = "reserved";
   order.status = "pedido_planeamiento";
   order.comment = "Presupuesto aceptado por el cliente. Vuelve a planeamiento para aprobacion de pedido.";
   saveState();
@@ -1659,11 +1854,18 @@ function clearQuoteForm(update = true) {
 function convertSavedQuote(quoteId) {
   const quote = state.quotes.find((item) => item.id === quoteId);
   if (!quote || quote.status !== "accepted") return;
+  const variant = state.quoteConfig.products.flatMap((product) => product.variants).find((item) => item.id === quote.variantId);
+  const stockCode = cleanProductCode(variant?.sku);
+  const quantity = Number(quote.calculation.quantity || 0);
+  if (!stockCode || inventoryFor(stockCode).available < quantity) {
+    alert(`No hay stock suficiente para ${stockCode || "la variante cotizada"}. Carga la compra antes de convertirla en venta.`);
+    return;
+  }
   const orderId = nextOrderId();
   state.orders.push({
     id: orderId, sellerId: quote.sellerId, seller: quote.seller, client: quote.client,
     clientPhone: "", clientEmail: "", deliveryAddress: "", product: `${quote.productName} ${quote.variantName}`,
-    quantity: quote.calculation.quantity, source: "taller", requestedDate: iso(7), committedDate: "",
+    quantity, source: "taller", stockCode, inventoryState: "reserved", requestedDate: iso(7), committedDate: "",
     requestType: "pedido", referenceImage: "", payment50: false, status: "pedido_planeamiento",
     notes: `${quote.color}. ${quote.printOption}. ${quote.notes}`.trim(), comment: `Creado desde ${quote.id}. Precio ${money(quote.calculation.unitPrice)} por unidad.`,
     quoteId: quote.id, quotedUnitPrice: quote.calculation.unitPrice, createdAt: Date.now()

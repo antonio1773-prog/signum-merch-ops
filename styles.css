@@ -555,6 +555,20 @@ h3 {
   margin-top: 18px;
 }
 
+.inventory-panel {
+  margin-top: 16px;
+}
+
+.stock-positive {
+  color: #137a4b;
+  font-weight: 900;
+}
+
+.stock-zero {
+  color: #b42318;
+  font-weight: 900;
+}
+
 .quote-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
