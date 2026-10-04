@@ -286,6 +286,42 @@ function normalizeState(rawState) {
     ...item
   }));
   parsed.finance.pricing ||= [];
+  const purchaseGroups = new Map();
+  parsed.finance.transactions
+    .filter((item) => item.type === "compra" && item.productCode && Number(item.quantity || 0) > 0)
+    .forEach((item) => {
+      const code = cleanProductCode(item.productCode);
+      const group = purchaseGroups.get(code) || { amount: 0, quantity: 0, name: "" };
+      group.amount += Number(item.amount || 0);
+      group.quantity += Number(item.quantity || 0);
+      group.name ||= item.productDescription || code;
+      purchaseGroups.set(code, group);
+    });
+  purchaseGroups.forEach((group, code) => {
+    const purchaseCost = group.quantity ? group.amount / group.quantity : 0;
+    let product = parsed.products.find((item) => cleanProductCode(item.productCode) === code);
+    if (!product) {
+      product = { id: uid(), productCode: code, name: group.name, price: purchaseCost, minimum: 1, source: "taller", leadTime: 7, active: true };
+      parsed.products.push(product);
+    }
+    let pricing = [...parsed.finance.pricing]
+      .filter((item) => cleanProductCode(item.productCode) === code)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    if (!pricing) {
+      pricing = {
+        id: uid(), productCode: code, productName: product.name || group.name, description: "Generado desde compras",
+        manualCost: 0, productionCost: 0, sublimationSheet: 0, machineWear: 0, labor: 0,
+        design: 0, electricity: 0, seller1: 0, seller2: 0, iva: false, createdAt: Date.now()
+      };
+      parsed.finance.pricing.push(pricing);
+    }
+    pricing.purchaseCost = purchaseCost;
+    const baseCost = Number(pricing.manualCost || 0) || purchaseCost;
+    pricing.subtotal = baseCost + Number(pricing.productionCost || 0) + Number(pricing.sublimationSheet || 0) + Number(pricing.machineWear || 0) + Number(pricing.labor || 0) + Number(pricing.design || 0) + Number(pricing.electricity || 0) + Number(pricing.seller1 || 0) + Number(pricing.seller2 || 0);
+    pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
+    pricing.total = pricing.subtotal + pricing.ivaAmount;
+    product.price = pricing.total;
+  });
   parsed.orders ||= [];
   parsed.orders = parsed.orders.map((order) => ({
     clientPhone: "",
@@ -573,6 +609,7 @@ function render() {
   $$(".view").forEach((view) => view.classList.remove("active"));
   $(`#view-${activeView}`).classList.add("active");
   renderProducts();
+  renderCommercialCosts();
   renderDynamics();
   renderClients();
   renderUsers();
@@ -1110,6 +1147,43 @@ function purchaseUnitCost(productCode) {
   return totalQuantity > 0 ? totalAmount / totalQuantity : totalAmount;
 }
 
+function latestPricingForCode(productCode) {
+  const code = cleanProductCode(productCode);
+  return [...(state.finance?.pricing || [])]
+    .filter((item) => cleanProductCode(item.productCode) === code)
+    .sort((a, b) => b.createdAt - a.createdAt)[0];
+}
+
+function ensurePricingForCode(productCode, productName = "") {
+  const code = cleanProductCode(productCode);
+  let pricing = latestPricingForCode(code);
+  if (pricing) return pricing;
+  const purchaseCost = purchaseUnitCost(code);
+  pricing = {
+    id: uid(), productCode: code, productName: productName || code, description: "Generado desde compras",
+    manualCost: 0, purchaseCost, productionCost: 0, sublimationSheet: 0, machineWear: 0,
+    labor: 0, design: 0, electricity: 0, seller1: 0, seller2: 0, iva: false,
+    subtotal: purchaseCost, ivaAmount: 0, total: purchaseCost, createdAt: Date.now()
+  };
+  state.finance.pricing.push(pricing);
+  return pricing;
+}
+
+function ensureProductForPurchase(productCode, productName) {
+  const code = cleanProductCode(productCode);
+  let product = state.products.find((item) => cleanProductCode(item.productCode) === code);
+  if (!product) {
+    product = {
+      id: uid(), productCode: code, name: productName || code, price: purchaseUnitCost(code),
+      minimum: 1, source: "taller", leadTime: 7, active: true
+    };
+    state.products.push(product);
+  } else {
+    product.active = true;
+    if (!product.name && productName) product.name = productName;
+  }
+}
+
 function recalculatePricingForCode(productCode) {
   const code = cleanProductCode(productCode);
   const purchaseCost = purchaseUnitCost(code);
@@ -1214,6 +1288,60 @@ function renderStock() {
     <table class="finance-table"><thead><tr><th>Fecha</th><th>Codigo</th><th>Descripcion</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th><th>Proveedor</th><th>Factura</th></tr></thead>
     <tbody>${purchases.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.productCode)}</strong></td><td>${escapeHtml(item.productDescription)}</td><td class="number-cell">${item.quantity}</td><td class="number-cell">${money(Number(item.amount || 0) / Math.max(1, Number(item.quantity || 0)))}</td><td class="number-cell">${money(item.amount)}</td><td>${escapeHtml(item.reference || "-")}</td><td>${item.invoiceImage ? `<a class="invoice-link" href="${item.invoiceImage}" target="_blank" rel="noreferrer">Ver factura</a>` : "-"}</td></tr>`).join("")}</tbody></table>`
     : `<div class="empty-state">No hay compras cargadas.</div>`;
+}
+
+function renderCommercialCosts() {
+  const container = $("#commercialCostTable");
+  if (!container) return;
+  const canEdit = canEditPlanning();
+  $("#commercialCostHelp").textContent = canEdit
+    ? "Completa los costos de taller. El precio final se actualiza para vendedores en tiempo real."
+    : "Consulta el costo completo y el precio final de cada producto con stock.";
+  const codes = purchaseCodes()
+    .map((item) => item.code)
+    .filter((code) => inventoryFor(code).available > 0);
+  if (!codes.length) {
+    container.innerHTML = `<div class="empty-state">No hay productos con stock disponible.</div>`;
+    return;
+  }
+  const costFields = [
+    ["productionCost", "Produccion"], ["sublimationSheet", "Hoja"], ["machineWear", "Maquina"],
+    ["labor", "Mano de obra"], ["design", "Diseno"], ["electricity", "Electricidad"],
+    ["seller1", "Vendedor 1"], ["seller2", "Vendedor 2"]
+  ];
+  container.innerHTML = `<table class="finance-table commercial-cost-table">
+    <thead><tr><th>Codigo / producto</th><th>Stock</th><th>Compra</th>${costFields.map(([, label]) => `<th>${label}</th>`).join("")}<th>IVA</th><th>Precio final</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+    <tbody>${codes.map((code) => {
+      const purchase = (state.finance.transactions || []).find((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
+      const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
+      const pricing = latestPricingForCode(code) || ensurePricingForCode(code, product?.name || purchase?.productDescription);
+      return `<tr data-cost-row="${escapeHtml(code)}">
+        <td><strong>${escapeHtml(code)}</strong><br><span class="meta">${escapeHtml(product?.name || purchase?.productDescription || code)}</span></td>
+        <td class="number-cell">${inventoryFor(code).available}</td>
+        <td class="number-cell"><strong>${money(purchaseUnitCost(code))}</strong></td>
+        ${costFields.map(([field]) => `<td>${canEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing[field] || 0)}" data-cost-field="${field}">` : money(pricing[field] || 0)}</td>`).join("")}
+        <td>${canEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
+        <td class="number-cell"><strong>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
+        ${canEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar</button></td>` : ""}
+      </tr>`;
+    }).join("")}</tbody></table>`;
+
+  $$('[data-save-cost]').forEach((button) => button.addEventListener("click", () => {
+    const code = button.dataset.saveCost;
+    const row = button.closest("tr");
+    const pricing = ensurePricingForCode(code);
+    row.querySelectorAll("[data-cost-field]").forEach((input) => {
+      pricing[input.dataset.costField] = input.type === "checkbox" ? input.checked : Number(input.value || 0);
+    });
+    pricing.purchaseCost = purchaseUnitCost(code);
+    const baseCost = Number(pricing.manualCost || 0) || pricing.purchaseCost;
+    pricing.subtotal = baseCost + Number(pricing.productionCost || 0) + Number(pricing.sublimationSheet || 0) + Number(pricing.machineWear || 0) + Number(pricing.labor || 0) + Number(pricing.design || 0) + Number(pricing.electricity || 0) + Number(pricing.seller1 || 0) + Number(pricing.seller2 || 0);
+    pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
+    pricing.total = pricing.subtotal + pricing.ivaAmount;
+    pricing.createdAt = Date.now();
+    state.products.filter((product) => cleanProductCode(product.productCode) === code).forEach((product) => { product.price = pricing.total; });
+    saveState();
+  }));
 }
 
 function renderBusiness() {
@@ -1546,6 +1674,8 @@ async function createPurchase(event) {
     invoiceImage,
     createdAt: Date.now()
   });
+  ensureProductForPurchase(data.productCode, data.productDescription);
+  ensurePricingForCode(data.productCode, data.productDescription);
   recalculatePricingForCode(data.productCode);
   form.reset();
   form.date.value = iso(0);

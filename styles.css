@@ -537,6 +537,30 @@ h3 {
   font-weight: 900;
 }
 
+.commercial-cost-panel {
+  margin-top: 18px;
+}
+
+.commercial-cost-table {
+  min-width: 1320px;
+}
+
+.commercial-cost-table .cost-input {
+  min-width: 88px;
+}
+
+.compact-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.compact-check input {
+  width: 16px;
+  height: 16px;
+}
+
 .quote-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);

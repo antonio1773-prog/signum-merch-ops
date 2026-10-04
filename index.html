@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-8" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-9" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -248,6 +248,16 @@
               </div>
               <button class="primary-button full" type="submit">Publicar dinamica</button>
             </form>
+          </div>
+
+          <div class="panel commercial-cost-panel">
+            <div class="section-header compact">
+              <div>
+                <h3>Costos y precios disponibles</h3>
+                <p id="commercialCostHelp">Costo de compra, costos de taller y precio final por producto.</p>
+              </div>
+            </div>
+            <div class="finance-table-wrap" id="commercialCostTable"></div>
           </div>
 
           <div class="catalog-grid">
@@ -739,6 +749,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-8"></script>
+    <script src="./app.js?v=signum-ops-9"></script>
   </body>
 </html>
