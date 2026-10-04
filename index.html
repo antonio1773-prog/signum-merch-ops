@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-7" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-8" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -44,31 +44,18 @@
             </div>
           </div>
 
-          <details class="account-menu" id="accountMenu">
-            <summary aria-label="Abrir menu de usuario">Menu</summary>
-            <div class="account-panel">
-              <label class="field access-picker">
-                <span>Sesion</span>
-                <select id="userSelect"></select>
-              </label>
+        </div>
 
-              <label class="field seller-menu is-hidden" id="sellerMenuWrap">
-                <span>Vista</span>
-                <select id="sellerViewSelect">
-                  <option value="new-order">Cargar pedido</option>
-                  <option value="my-orders">Mis pedidos</option>
-                  <option value="planning">Planeamiento</option>
-                  <option value="quotes">Cotizador</option>
-                  <option value="capacity">Agenda</option>
-                  <option value="metrics">Indicadores</option>
-                </select>
-              </label>
+        <div class="sidebar-controls">
+          <label class="field access-picker">
+            <span>Sesion</span>
+            <select id="userSelect"></select>
+          </label>
 
-              <nav class="nav" id="navTabs" aria-label="Secciones"></nav>
+          <nav class="nav seller-menu is-hidden" id="sellerMenuWrap" aria-label="Vistas del vendedor"></nav>
+          <nav class="nav" id="navTabs" aria-label="Secciones"></nav>
 
-              <button class="ghost-button dark" id="logoutButton" type="button">Cerrar sesion</button>
-            </div>
-          </details>
+          <button class="ghost-button dark" id="logoutButton" type="button">Cerrar sesion</button>
         </div>
 
         <div class="sync-card" id="syncCard">
@@ -752,6 +739,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-7"></script>
+    <script src="./app.js?v=signum-ops-8"></script>
   </body>
 </html>

@@ -471,11 +471,6 @@ function setup() {
     event.target.value = activeUserId;
   });
 
-  $("#sellerViewSelect").addEventListener("change", (event) => {
-    activeView = event.target.value;
-    render();
-  });
-
   $("#clientInput").addEventListener("change", fillClientFromCrm);
   $("#orderSearch").addEventListener("input", renderOrders);
   $("#statusFilter").addEventListener("change", renderOrders);
@@ -533,7 +528,6 @@ function login(event) {
   activeUserId = user.id;
   sessionStorage.setItem("signum-active-user", activeUserId);
   activeView = user.role === "vendedor" ? "new-order" : "workflow";
-  $("#sellerViewSelect").value = activeView;
   event.currentTarget.reset();
   render();
 }
@@ -608,7 +602,19 @@ function renderUserSelect() {
 
 function renderNav() {
   const user = currentUser();
-  if (user.role === "vendedor") return;
+  const sellerTabs = ["new-order", "my-orders", "planning", "quotes", "capacity", "metrics"];
+  if (user.role === "vendedor") {
+    $("#sellerMenuWrap").innerHTML = sellerTabs
+      .map((tab) => `<button type="button" class="${tab === activeView ? "active" : ""}" data-tab="${tab}">${tab === "new-order" ? "Cargar pedido" : tab === "my-orders" ? "Mis pedidos" : tabs[tab]}</button>`)
+      .join("");
+    $$("#sellerMenuWrap button").forEach((button) => {
+      button.addEventListener("click", () => {
+        activeView = button.dataset.tab;
+        render();
+      });
+    });
+    return;
+  }
   const roleTabs =
     user.role === "direccion"
       ? ["workflow", "quotes", "stock", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
@@ -621,7 +627,6 @@ function renderNav() {
   $$("#navTabs button").forEach((button) => {
     button.addEventListener("click", () => {
       activeView = button.dataset.tab;
-      $("#accountMenu").open = false;
       render();
     });
   });
@@ -1414,7 +1419,6 @@ async function createOrder(event) {
   form.requestType.value = "pedido";
   form.requestedDate.value = iso(7);
   activeView = currentUser().role === "vendedor" ? "my-orders" : "workflow";
-  $("#sellerViewSelect").value = "my-orders";
   saveState();
 }
 
