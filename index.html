@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-9" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-10" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -121,7 +121,13 @@
                 <span>Fecha ideal</span>
                 <input name="requestedDate" type="date" required />
               </label>
+              <label class="field">
+                <span>Precio final de venta por unidad</span>
+                <input name="saleUnitPrice" id="saleUnitPrice" type="number" min="0" step="0.01" required />
+              </label>
             </div>
+
+            <div class="sale-preview" id="salePreview"></div>
 
             <label class="field">
               <span>Direccion de entrega</span>
@@ -749,6 +755,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-9"></script>
+    <script src="./app.js?v=signum-ops-10"></script>
   </body>
 </html>

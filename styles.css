@@ -549,6 +549,36 @@ h3 {
   min-width: 88px;
 }
 
+.sale-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.sale-preview > div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.sale-preview span,
+.sale-preview strong {
+  display: block;
+}
+
+.sale-preview span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sale-preview strong {
+  margin-top: 5px;
+}
+
 .compact-check {
   display: inline-flex;
   align-items: center;
@@ -1271,6 +1301,10 @@ dialog::backdrop {
 
   .workspace {
     padding: 18px;
+  }
+
+  .sale-preview {
+    grid-template-columns: 1fr;
   }
 
   .topbar,

@@ -308,12 +308,17 @@ function normalizeState(rawState) {
       .filter((item) => cleanProductCode(item.productCode) === code)
       .sort((a, b) => b.createdAt - a.createdAt)[0];
     if (!pricing) {
+      const defaults = commercialCostDefaults(parsed);
       pricing = {
         id: uid(), productCode: code, productName: product.name || group.name, description: "Generado desde compras",
-        manualCost: 0, productionCost: 0, sublimationSheet: 0, machineWear: 0, labor: 0,
-        design: 0, electricity: 0, seller1: 0, seller2: 0, iva: false, createdAt: Date.now()
+        manualCost: 0, ...defaults, seller1: 0, seller2: 0, iva: false, createdAt: Date.now()
       };
       parsed.finance.pricing.push(pricing);
+    }
+    const defaults = commercialCostDefaults(parsed);
+    const costFields = ["productionCost", "sublimationSheet", "machineWear", "labor", "design", "electricity"];
+    if (!pricing.costsCustomized && costFields.every((field) => !Number(pricing[field] || 0))) {
+      Object.assign(pricing, defaults);
     }
     pricing.purchaseCost = purchaseCost;
     const baseCost = Number(pricing.manualCost || 0) || purchaseCost;
@@ -332,6 +337,10 @@ function normalizeState(rawState) {
     referenceFileType: "",
     stockCode: "",
     inventoryState: "",
+    saleUnitPrice: 0,
+    saleTotal: 0,
+    commissionRate: 0,
+    commissionAmount: 0,
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
   }));
@@ -513,6 +522,9 @@ function setup() {
   $("#workflowSearch").addEventListener("input", renderWorkflow);
   $("#workflowFilter").addEventListener("change", renderWorkflow);
   $("#orderForm").addEventListener("submit", createOrder);
+  $("#productSelect").addEventListener("change", () => updateSalePreview(true));
+  $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false));
+  $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#clientForm").addEventListener("submit", createClient);
@@ -677,6 +689,18 @@ function cleanProductCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function commercialCostDefaults(sourceState = state) {
+  const costs = sourceState.quoteConfig?.costs || {};
+  return {
+    productionCost: Number(costs.ink || 0) + Number(costs.tape || 0),
+    sublimationSheet: Number(costs.paper || 0),
+    machineWear: Number(costs.printerDepreciation || 0) + Number(costs.pressDepreciation || 0),
+    labor: Number(costs.labor || 0),
+    design: 0,
+    electricity: Number(costs.electricity || 0)
+  };
+}
+
 function inventoryFor(productCode) {
   const code = cleanProductCode(productCode);
   const purchases = (state.finance?.transactions || []).filter((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
@@ -712,8 +736,9 @@ function renderProducts() {
   const sellerView = currentUser().role === "vendedor";
   const activeProducts = state.products.filter((product) => product.active && (!sellerView || inventoryFor(product.productCode).available > 0));
   $("#productSelect").innerHTML = activeProducts
-    .map((product) => `<option value="${product.name}" data-source="${product.source}">${product.name} - ${money(product.price)} · ${inventoryFor(product.productCode).available} disponibles</option>`)
+    .map((product) => `<option value="${product.name}" data-source="${product.source}" data-price="${Number(product.price || 0)}">${product.name} - ${money(product.price)} · ${inventoryFor(product.productCode).available} disponibles</option>`)
     .join("");
+  updateSalePreview(!$("#saleUnitPrice").value);
 
   $("#productList").innerHTML = activeProducts.length
     ? activeProducts
@@ -906,6 +931,9 @@ function orderMatrixTemplate(orders) {
             <th>Direccion entrega</th>
             <th>Producto</th>
             <th>Cant.</th>
+            <th>Precio venta</th>
+            <th>Total</th>
+            <th>Comision</th>
             <th>Origen</th>
             <th>Sena</th>
             <th>Fecha ideal</th>
@@ -937,6 +965,9 @@ function matrixRowTemplate(order) {
       <td>${order.deliveryAddress || "Sin direccion"}</td>
       <td>${order.product}</td>
       <td class="number-cell">${order.quantity}</td>
+      <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
+      <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
+      <td class="number-cell">${money(order.commissionAmount || 0)}${order.commissionRate ? `<br><span class="meta">${order.commissionRate}%</span>` : ""}</td>
       <td>${order.source === "taller" ? "Taller" : "Fabrica"}</td>
       <td>${order.payment50 ? "Confirmada" : "Pendiente"}</td>
       <td>${formatDate(order.requestedDate)}</td>
@@ -964,6 +995,9 @@ function orderTemplate(order, mode) {
       <div class="order-meta">
         <div class="meta-box"><span>Tipo</span><strong>${order.requestType === "pedido" ? "Pedido" : "Presupuesto"}</strong></div>
         <div class="meta-box"><span>Cantidad</span><strong>${order.quantity}</strong></div>
+        <div class="meta-box"><span>Precio venta</span><strong>${money(order.saleUnitPrice || productPrice(order.product))}</strong></div>
+        <div class="meta-box"><span>Total venta</span><strong>${money(order.saleTotal || orderRevenue(order))}</strong></div>
+        <div class="meta-box"><span>Comision</span><strong>${money(order.commissionAmount || 0)}</strong></div>
         <div class="meta-box"><span>Destino</span><strong>${order.source === "taller" ? "Taller" : "Fabrica"}</strong></div>
         <div class="meta-box"><span>Sena 50%</span><strong>${order.payment50 ? "Confirmada" : "Pendiente"}</strong></div>
         <div class="meta-box"><span>Fecha ideal</span><strong>${formatDate(order.requestedDate)}</strong></div>
@@ -1106,7 +1140,24 @@ function productPrice(productName) {
 }
 
 function orderRevenue(order) {
-  return productPrice(order.product) * Number(order.quantity || 0);
+  return Number(order.saleTotal || 0) || productPrice(order.product) * Number(order.quantity || 0);
+}
+
+function updateSalePreview(resetPrice = false) {
+  const form = $("#orderForm");
+  if (!form || !$("#salePreview")) return;
+  const product = state.products.find((item) => item.name === form.product.value);
+  const suggested = Number(product?.price || 0);
+  if (resetPrice || !form.saleUnitPrice.value) form.saleUnitPrice.value = suggested || "";
+  const unitPrice = Number(form.saleUnitPrice.value || 0);
+  const quantity = Math.max(1, Number(form.quantity.value || 1));
+  const rate = Number(state.quoteConfig?.policy?.commissionRate || 0);
+  const total = unitPrice * quantity;
+  const commission = total * rate / 100;
+  $("#salePreview").innerHTML = `
+    <div><span>Precio sugerido</span><strong>${money(suggested)}</strong></div>
+    <div><span>Total de venta</span><strong>${money(total)}</strong></div>
+    <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
 }
 
 function financeTotals() {
@@ -1159,13 +1210,14 @@ function ensurePricingForCode(productCode, productName = "") {
   let pricing = latestPricingForCode(code);
   if (pricing) return pricing;
   const purchaseCost = purchaseUnitCost(code);
+  const defaults = commercialCostDefaults();
   pricing = {
     id: uid(), productCode: code, productName: productName || code, description: "Generado desde compras",
-    manualCost: 0, purchaseCost, productionCost: 0, sublimationSheet: 0, machineWear: 0,
-    labor: 0, design: 0, electricity: 0, seller1: 0, seller2: 0, iva: false,
+    manualCost: 0, purchaseCost, ...defaults, seller1: 0, seller2: 0, iva: false,
     subtotal: purchaseCost, ivaAmount: 0, total: purchaseCost, createdAt: Date.now()
   };
   state.finance.pricing.push(pricing);
+  recalculatePricingForCode(code);
   return pricing;
 }
 
@@ -1321,7 +1373,7 @@ function renderCommercialCosts() {
         <td class="number-cell"><strong>${money(purchaseUnitCost(code))}</strong></td>
         ${costFields.map(([field]) => `<td>${canEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing[field] || 0)}" data-cost-field="${field}">` : money(pricing[field] || 0)}</td>`).join("")}
         <td>${canEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
-        <td class="number-cell"><strong>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
+        <td class="number-cell"><strong data-cost-total>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
         ${canEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar</button></td>` : ""}
       </tr>`;
     }).join("")}</tbody></table>`;
@@ -1339,9 +1391,19 @@ function renderCommercialCosts() {
     pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
     pricing.total = pricing.subtotal + pricing.ivaAmount;
     pricing.createdAt = Date.now();
+    pricing.costsCustomized = true;
     state.products.filter((product) => cleanProductCode(product.productCode) === code).forEach((product) => { product.price = pricing.total; });
     saveState();
   }));
+  $$('#commercialCostTable [data-cost-field]').forEach((input) => input.addEventListener("input", () => {
+    const row = input.closest("tr");
+    const code = row.dataset.costRow;
+    let subtotal = purchaseUnitCost(code);
+    row.querySelectorAll('[data-cost-field]:not([type="checkbox"])').forEach((field) => { subtotal += Number(field.value || 0); });
+    const iva = row.querySelector('[data-cost-field="iva"]')?.checked ? subtotal * 0.21 : 0;
+    row.querySelector('[data-cost-total]').textContent = money(subtotal + iva);
+  }));
+  $$('#commercialCostTable [data-cost-field="iva"]').forEach((input) => input.addEventListener("change", () => input.dispatchEvent(new Event("input"))));
 }
 
 function renderBusiness() {
@@ -1505,6 +1567,8 @@ async function createOrder(event) {
   const data = Object.fromEntries(new FormData(form));
   const product = state.products.find((item) => item.name === data.product);
   const quantity = Number(data.quantity || 0);
+  const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
+  const commissionRate = Number(state.quoteConfig?.policy?.commissionRate || 0);
   const isOrder = data.requestType === "pedido";
   if (!product) {
     alert("Selecciona un producto con stock disponible.");
@@ -1528,6 +1592,10 @@ async function createOrder(event) {
     deliveryAddress: data.deliveryAddress,
     product: data.product,
     quantity,
+    saleUnitPrice,
+    saleTotal: saleUnitPrice * quantity,
+    commissionRate,
+    commissionAmount: saleUnitPrice * quantity * commissionRate / 100,
     source: product?.source || "taller",
     stockCode: cleanProductCode(product.productCode),
     inventoryState: isOrder ? "reserved" : "",
@@ -1546,6 +1614,7 @@ async function createOrder(event) {
   form.reset();
   form.requestType.value = "pedido";
   form.requestedDate.value = iso(7);
+  updateSalePreview(true);
   activeView = currentUser().role === "vendedor" ? "my-orders" : "workflow";
   saveState();
 }
@@ -1688,6 +1757,7 @@ function createPricing(event) {
   state.finance.pricing.push({
     id: uid(),
     ...pricing,
+    costsCustomized: true,
     createdAt: Date.now()
   });
   recalculatePricingForCode(pricing.productCode);
