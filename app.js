@@ -610,11 +610,18 @@ function render() {
   if (user.role !== "direccion" && ["crm", "users", "business", "stock"].includes(activeView)) activeView = "workflow";
 
   $("#roleEyebrow").textContent = `${user.name} · ${roleLabels[user.role]}`;
-  $("#pageTitle").textContent = viewTitles[activeView];
+  $("#pageTitle").textContent = activeView === "planning" && !canEditPlanning() ? "Promociones y dinamicas" : viewTitles[activeView];
   $("#sellerBadge").textContent = user.name;
   $("#sellerMenuWrap").classList.toggle("is-hidden", user.role !== "vendedor");
   $("#navTabs").classList.toggle("is-hidden", user.role === "vendedor");
   $("#planningForms").classList.toggle("is-hidden", !canEditPlanning());
+  $("#commercialCostPanel").classList.toggle("is-hidden", !canEditPlanning());
+  $("#productCatalogPanel").classList.toggle("is-hidden", !canEditPlanning());
+  $("#planningCatalogGrid").classList.toggle("promotions-only", !canEditPlanning());
+  $("#planningPageTitle").textContent = canEditPlanning() ? "Productos y dinamicas" : "Promociones y dinamicas";
+  $("#planningPageCopy").textContent = canEditPlanning()
+    ? "Catalogo comercial vigente, costos y cambios disponibles para vendedores."
+    : "Promociones, condiciones y novedades comerciales vigentes.";
   $("#crmForms").classList.toggle("is-hidden", user.role !== "direccion");
 
   renderNav();
@@ -1345,6 +1352,10 @@ function renderStock() {
 function renderCommercialCosts() {
   const container = $("#commercialCostTable");
   if (!container) return;
+  if (!canEditPlanning()) {
+    container.innerHTML = "";
+    return;
+  }
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
     ? "Completa los costos de taller. El precio final se actualiza para vendedores en tiempo real."

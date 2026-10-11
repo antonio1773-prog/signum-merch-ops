@@ -541,6 +541,10 @@ h3 {
   margin-top: 18px;
 }
 
+.catalog-grid.promotions-only {
+  grid-template-columns: minmax(0, 720px);
+}
+
 .commercial-cost-table {
   min-width: 1320px;
 }

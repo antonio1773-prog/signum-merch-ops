@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-10" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-11" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -188,8 +188,8 @@
         <section class="view" id="view-planning" aria-label="Planeamiento visible">
           <div class="section-header">
             <div>
-              <h2>Productos y dinamicas</h2>
-              <p>Catalogo comercial vigente y cambios disponibles para vendedores.</p>
+              <h2 id="planningPageTitle">Productos y dinamicas</h2>
+              <p id="planningPageCopy">Catalogo comercial vigente y cambios disponibles para vendedores.</p>
             </div>
           </div>
 
@@ -256,7 +256,7 @@
             </form>
           </div>
 
-          <div class="panel commercial-cost-panel">
+          <div class="panel commercial-cost-panel" id="commercialCostPanel">
             <div class="section-header compact">
               <div>
                 <h3>Costos y precios disponibles</h3>
@@ -266,8 +266,8 @@
             <div class="finance-table-wrap" id="commercialCostTable"></div>
           </div>
 
-          <div class="catalog-grid">
-            <div>
+          <div class="catalog-grid" id="planningCatalogGrid">
+            <div id="productCatalogPanel">
               <h3>Catalogo activo</h3>
               <div id="productList" class="stack"></div>
             </div>
@@ -755,6 +755,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-10"></script>
+    <script src="./app.js?v=signum-ops-11"></script>
   </body>
 </html>
