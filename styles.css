@@ -555,9 +555,78 @@ h3 {
 
 .sale-preview {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.sale-preview.compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.product-category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(110px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.product-category-card {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #0b0a0f;
+  text-align: left;
+}
+
+.product-category-card.active {
+  border-color: var(--purple-2);
+  box-shadow: 0 0 0 2px rgba(122, 92, 250, 0.18);
+}
+
+.category-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background-image: url("./product-category-sprite.png");
+  background-repeat: no-repeat;
+  background-size: 200% 200%;
+}
+
+.product-category-card strong {
+  display: block;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.print-recommendation {
+  min-height: 48px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--purple-2);
+  background: rgba(122, 92, 250, 0.08);
+}
+
+.print-recommendation p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.print-method-costs {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.method-cost-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .sale-preview > div {
@@ -803,6 +872,7 @@ h3 {
 
 .segmented input {
   position: absolute;
+  width: auto;
   opacity: 0;
   pointer-events: none;
 }
@@ -1273,6 +1343,9 @@ dialog::backdrop {
   .sidebar .nav {
     grid-column: 1 / -1;
     display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     gap: 5px;
     overflow-x: auto;
     scrollbar-width: thin;
@@ -1309,6 +1382,14 @@ dialog::backdrop {
 
   .sale-preview {
     grid-template-columns: 1fr;
+  }
+
+  .product-category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .method-cost-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .topbar,

@@ -27,13 +27,19 @@ const seedState = {
     { id: uid(), name: "Hotel Acacia", phone: "+54 223 512-9044", email: "eventos@hotelacacia.com", active: true }
   ],
   products: [
-    { id: uid(), productCode: "REM-001", name: "Remera premium bordada", price: 14800, minimum: 25, source: "taller", leadTime: 6, active: true },
-    { id: uid(), productCode: "GOR-001", name: "Gorra trucker personalizada", price: 9700, minimum: 50, source: "fabrica", leadTime: 10, active: true },
-    { id: uid(), productCode: "KIT-001", name: "Kit bienvenida corporativo", price: 42500, minimum: 20, source: "taller", leadTime: 8, active: true }
+    { id: uid(), productCode: "REM-001", name: "Remera premium bordada", category: "remera", variant: "Talle a definir", color: "Blanco", price: 14800, minimum: 25, source: "taller", leadTime: 6, active: true },
+    { id: uid(), productCode: "GOR-001", name: "Gorra trucker personalizada", category: "gorra", variant: "Trucker", color: "Negro", price: 9700, minimum: 50, source: "fabrica", leadTime: 10, active: true },
+    { id: uid(), productCode: "KIT-001", name: "Kit bienvenida corporativo", category: "otro", variant: "Estandar", color: "", price: 42500, minimum: 20, source: "taller", leadTime: 8, active: true }
   ],
   dynamics: [
     { id: uid(), title: "Prioridad onboarding Q4", description: "Kits bienvenida con cupo preferencial hasta agotar 300 unidades.", priority: "alta", expires: iso(2), active: true },
     { id: uid(), title: "Bonificacion volumen", description: "10% off en remeras desde 150 unidades. No acumulable.", priority: "media", expires: iso(1), active: true }
+  ],
+  printMethods: [
+    { id: "sublimacion", name: "Sublimacion", unitCost: 710, categories: ["bolsa", "remera"], lightOnly: true, active: true },
+    { id: "dtf", name: "DTF", unitCost: 650, categories: ["bolsa", "remera", "gorra"], lightOnly: false, active: true },
+    { id: "grabado", name: "Grabado / marcado", unitCost: 450, categories: ["bolsa", "lapicera"], lightOnly: false, active: true },
+    { id: "sin-impresion", name: "Sin impresion", unitCost: 0, categories: ["bolsa", "remera", "gorra", "lapicera", "otro"], lightOnly: false, active: true }
   ],
   quoteConfig: {
     costs: {
@@ -160,6 +166,7 @@ const seedState = {
 let state = loadState();
 let activeUserId = sessionStorage.getItem("signum-active-user") || "";
 let activeView = "new-order";
+let activeProductCategory = "";
 
 const roleLabels = {
   vendedor: "Vendedor",
@@ -258,6 +265,7 @@ function normalizeState(rawState) {
     }
   });
   parsed.clients ||= [];
+  parsed.printMethods ||= structuredClone(seedState.printMethods);
   parsed.quoteConfig ||= structuredClone(seedState.quoteConfig);
   parsed.quoteConfig.costs = { ...structuredClone(seedState.quoteConfig.costs), ...(parsed.quoteConfig.costs || {}) };
   parsed.quoteConfig.policy = { ...structuredClone(seedState.quoteConfig.policy), ...(parsed.quoteConfig.policy || {}) };
@@ -273,7 +281,13 @@ function normalizeState(rawState) {
   });
   parsed.quotes ||= [];
   parsed.products ||= structuredClone(seedState.products);
-  parsed.products = parsed.products.map((product) => ({ productCode: "", ...product }));
+  parsed.products = parsed.products.map((product) => ({
+    productCode: "",
+    variant: "",
+    ...product,
+    category: product.category || inferProductCategory(product.name),
+    color: product.color || inferProductColor(product.name)
+  }));
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.finance ||= structuredClone(seedState.finance);
   parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
@@ -283,6 +297,10 @@ function normalizeState(rawState) {
     productCode: "",
     productDescription: "",
     invoiceImage: "",
+    category: inferProductCategory(item.productDescription),
+    variant: "",
+    color: "",
+    source: "taller",
     ...item
   }));
   parsed.finance.pricing ||= [];
@@ -291,7 +309,7 @@ function normalizeState(rawState) {
     .filter((item) => item.type === "compra" && item.productCode && Number(item.quantity || 0) > 0)
     .forEach((item) => {
       const code = cleanProductCode(item.productCode);
-      const group = purchaseGroups.get(code) || { amount: 0, quantity: 0, name: "" };
+      const group = purchaseGroups.get(code) || { amount: 0, quantity: 0, name: "", category: item.category, variant: item.variant, color: item.color, source: item.source };
       group.amount += Number(item.amount || 0);
       group.quantity += Number(item.quantity || 0);
       group.name ||= item.productDescription || code;
@@ -301,7 +319,7 @@ function normalizeState(rawState) {
     const purchaseCost = group.quantity ? group.amount / group.quantity : 0;
     let product = parsed.products.find((item) => cleanProductCode(item.productCode) === code);
     if (!product) {
-      product = { id: uid(), productCode: code, name: group.name, price: purchaseCost, minimum: 1, source: "taller", leadTime: 7, active: true };
+      product = { id: uid(), productCode: code, name: group.name, category: group.category || inferProductCategory(group.name), variant: group.variant || "", color: group.color || "", price: purchaseCost, minimum: 1, source: group.source || "taller", leadTime: 7, active: true };
       parsed.products.push(product);
     }
     let pricing = [...parsed.finance.pricing]
@@ -341,6 +359,13 @@ function normalizeState(rawState) {
     saleTotal: 0,
     commissionRate: 0,
     commissionAmount: 0,
+    productCategory: "",
+    productVariant: "",
+    productColor: "",
+    printMethodId: "sin-impresion",
+    printMethod: "Sin impresion",
+    baseUnitCost: 0,
+    printUnitCost: 0,
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
   }));
@@ -522,7 +547,8 @@ function setup() {
   $("#workflowSearch").addEventListener("input", renderWorkflow);
   $("#workflowFilter").addEventListener("change", renderWorkflow);
   $("#orderForm").addEventListener("submit", createOrder);
-  $("#productSelect").addEventListener("change", () => updateSalePreview(true));
+  $("#productSelect").addEventListener("change", () => updateProductConfiguration(true));
+  $("#printMethodSelect").addEventListener("change", () => updateSalePreview(true));
   $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false));
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false));
   $("#productForm").addEventListener("submit", createProduct);
@@ -696,6 +722,44 @@ function cleanProductCode(value) {
   return String(value || "").trim().toUpperCase();
 }
 
+function inferProductCategory(value = "") {
+  const text = String(value).toLowerCase();
+  if (text.includes("bols") || text.includes("friselina")) return "bolsa";
+  if (text.includes("remera") || text.includes("camiseta")) return "remera";
+  if (text.includes("gorra")) return "gorra";
+  if (text.includes("lapic") || text.includes("boligraf")) return "lapicera";
+  return "otro";
+}
+
+function inferProductColor(value = "") {
+  const text = String(value).toLowerCase();
+  if (text.includes("negro") || text.includes("negra")) return "Negro";
+  if (text.includes("blanco") || text.includes("blanca")) return "Blanco";
+  if (text.includes("beige") || text.includes("natural")) return "Beige";
+  if (text.includes("azul marino")) return "Azul marino";
+  return "";
+}
+
+const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", otro: "Otros" };
+const categoryPositions = { bolsa: "0% 0%", gorra: "100% 0%", remera: "0% 100%", lapicera: "100% 100%", otro: "50% 50%" };
+
+function isLightColor(color = "") {
+  const value = color.toLowerCase();
+  return !["negro", "negra", "azul marino", "oscuro", "oscura"].some((term) => value.includes(term));
+}
+
+function orderProducts() {
+  return state.products.filter((product) => {
+    if (!product.active) return false;
+    return product.source === "fabrica" || inventoryFor(product.productCode).available > 0;
+  });
+}
+
+function availablePrintMethods(product) {
+  const category = product?.category || inferProductCategory(product?.name);
+  return state.printMethods.filter((method) => method.active && method.categories.includes(category) && (!method.lightOnly || isLightColor(product?.color)));
+}
+
 function commercialCostDefaults(sourceState = state) {
   const costs = sourceState.quoteConfig?.costs || {};
   return {
@@ -710,7 +774,7 @@ function commercialCostDefaults(sourceState = state) {
 
 function inventoryFor(productCode) {
   const code = cleanProductCode(productCode);
-  const purchases = (state.finance?.transactions || []).filter((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
+  const purchases = (state.finance?.transactions || []).filter((item) => item.type === "compra" && item.source !== "fabrica" && cleanProductCode(item.productCode) === code);
   const purchased = purchases.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   const reserved = state.orders
     .filter((order) => cleanProductCode(order.stockCode) === code && order.inventoryState === "reserved")
@@ -740,12 +804,25 @@ function visibleOrders(scope = "list") {
 }
 
 function renderProducts() {
-  const sellerView = currentUser().role === "vendedor";
-  const activeProducts = state.products.filter((product) => product.active && (!sellerView || inventoryFor(product.productCode).available > 0));
-  $("#productSelect").innerHTML = activeProducts
-    .map((product) => `<option value="${product.name}" data-source="${product.source}" data-price="${Number(product.price || 0)}">${product.name} - ${money(product.price)} · ${inventoryFor(product.productCode).available} disponibles</option>`)
+  const activeProducts = state.products.filter((product) => product.active);
+  const selectable = orderProducts();
+  const categories = [...new Set(selectable.map((product) => product.category || inferProductCategory(product.name)))];
+  if (!categories.includes(activeProductCategory)) activeProductCategory = categories[0] || "";
+  $("#productCategoryGrid").innerHTML = categories.map((category) => `
+    <button class="product-category-card ${category === activeProductCategory ? "active" : ""}" type="button" data-product-category="${category}">
+      <span class="category-image" style="background-position:${categoryPositions[category] || categoryPositions.otro}"></span>
+      <strong>${categoryLabels[category] || "Otros"}</strong>
+    </button>`).join("");
+  $$('[data-product-category]').forEach((button) => button.addEventListener("click", () => {
+    activeProductCategory = button.dataset.productCategory;
+    renderProducts();
+  }));
+  const categoryProducts = selectable.filter((product) => (product.category || inferProductCategory(product.name)) === activeProductCategory);
+  $("#productVariantLabel").textContent = activeProductCategory === "bolsa" ? "Medida y color" : activeProductCategory === "remera" ? "Talle y color" : activeProductCategory === "gorra" ? "Modelo y color" : activeProductCategory === "lapicera" ? "Modelo" : "Variante";
+  $("#productSelect").innerHTML = categoryProducts
+    .map((product) => `<option value="${product.name}" data-source="${product.source}" data-price="${Number(product.price || 0)}">${product.variant || product.name}${product.color ? ` · ${product.color}` : ""}${product.source === "fabrica" ? " · A cotizar fabrica" : ` · ${inventoryFor(product.productCode).available} disponibles`}</option>`)
     .join("");
-  updateSalePreview(!$("#saleUnitPrice").value);
+  updateProductConfiguration(true);
 
   $("#productList").innerHTML = activeProducts.length
     ? activeProducts
@@ -785,6 +862,24 @@ function renderProducts() {
       saveState();
     });
   });
+}
+
+function updateProductConfiguration(resetPrice = true) {
+  const form = $("#orderForm");
+  const product = state.products.find((item) => item.name === form.product.value);
+  const methods = availablePrintMethods(product);
+  const recommended = methods.find((method) => method.id === "sublimacion") || methods.find((method) => method.id === "dtf") || methods.find((method) => method.id === "grabado") || methods[0];
+  $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(method.unitCost)}</option>`).join("");
+  const factory = product?.source === "fabrica";
+  const orderRadio = form.querySelector('[name="requestType"][value="pedido"]');
+  if (factory) {
+    orderRadio.disabled = true;
+    form.querySelector('[name="requestType"][value="presupuesto"]').checked = true;
+  } else {
+    orderRadio.disabled = false;
+  }
+  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}</p>` : "";
+  updateSalePreview(resetPrice);
 }
 
 function renderDynamics() {
@@ -970,7 +1065,7 @@ function matrixRowTemplate(order) {
       <td>${order.client}</td>
       <td>${contact}</td>
       <td>${order.deliveryAddress || "Sin direccion"}</td>
-      <td>${order.product}</td>
+      <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span></td>
       <td class="number-cell">${order.quantity}</td>
       <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
       <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
@@ -1012,6 +1107,7 @@ function orderTemplate(order, mode) {
       </div>
       <p class="meta"><strong>Contacto:</strong> ${contact}</p>
       <p class="meta"><strong>Direccion entrega:</strong> ${order.deliveryAddress || "Sin direccion cargada"}</p>
+      <p class="meta"><strong>Configuracion:</strong> ${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ") || "Sin detalle"}</p>
       ${attachmentTemplate(order)}
       ${order.notes ? `<p class="meta">${order.notes}</p>` : ""}
       ${order.comment ? `<p class="meta"><strong>Comentario:</strong> ${order.comment}</p>` : ""}
@@ -1154,14 +1250,21 @@ function updateSalePreview(resetPrice = false) {
   const form = $("#orderForm");
   if (!form || !$("#salePreview")) return;
   const product = state.products.find((item) => item.name === form.product.value);
-  const suggested = Number(product?.price || 0);
+  const method = state.printMethods.find((item) => item.id === form.printMethod.value);
+  const baseCost = product?.source === "fabrica" ? Number(product?.price || 0) : purchaseUnitCost(product?.productCode) || Number(product?.price || 0);
+  const printCost = Number(method?.unitCost || 0);
+  const rate = Number(state.quoteConfig?.policy?.commissionRate || 0);
+  const directCost = baseCost + printCost;
+  const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
+  const suggested = Math.ceil(rawSuggested / 50) * 50;
   if (resetPrice || !form.saleUnitPrice.value) form.saleUnitPrice.value = suggested || "";
   const unitPrice = Number(form.saleUnitPrice.value || 0);
   const quantity = Math.max(1, Number(form.quantity.value || 1));
-  const rate = Number(state.quoteConfig?.policy?.commissionRate || 0);
   const total = unitPrice * quantity;
   const commission = total * rate / 100;
+  $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
+    ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
     <div><span>Precio sugerido</span><strong>${money(suggested)}</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
     <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
@@ -1228,18 +1331,23 @@ function ensurePricingForCode(productCode, productName = "") {
   return pricing;
 }
 
-function ensureProductForPurchase(productCode, productName) {
-  const code = cleanProductCode(productCode);
+function ensureProductForPurchase(purchase) {
+  const code = cleanProductCode(purchase.productCode);
   let product = state.products.find((item) => cleanProductCode(item.productCode) === code);
   if (!product) {
     product = {
-      id: uid(), productCode: code, name: productName || code, price: purchaseUnitCost(code),
-      minimum: 1, source: "taller", leadTime: 7, active: true
+      id: uid(), productCode: code, name: purchase.productDescription || code, price: purchaseUnitCost(code),
+      category: purchase.category || inferProductCategory(purchase.productDescription), variant: purchase.variant || "",
+      color: purchase.color || "", minimum: 1, source: purchase.source || "taller", leadTime: 7, active: true
     };
     state.products.push(product);
   } else {
     product.active = true;
-    if (!product.name && productName) product.name = productName;
+    product.category = purchase.category || product.category || inferProductCategory(product.name);
+    product.variant = purchase.variant || product.variant || "";
+    product.color = purchase.color || product.color || "";
+    product.source = purchase.source || product.source || "taller";
+    if (!product.name && purchase.productDescription) product.name = purchase.productDescription;
   }
 }
 
@@ -1354,8 +1462,19 @@ function renderCommercialCosts() {
   if (!container) return;
   if (!canEditPlanning()) {
     container.innerHTML = "";
+    $("#printMethodCostTable").innerHTML = "";
     return;
   }
+  $("#printMethodCostTable").innerHTML = `<div class="method-cost-grid">${state.printMethods.map((method) => `
+    <label class="field"><span>${method.name}</span><input type="number" min="0" step="0.01" value="${Number(method.unitCost || 0)}" data-print-method-cost="${method.id}"></label>`).join("")}</div>
+    <button class="small-button" type="button" id="savePrintMethodCosts">Guardar costos de impresion</button>`;
+  $("#savePrintMethodCosts").addEventListener("click", () => {
+    $$('[data-print-method-cost]').forEach((input) => {
+      const method = state.printMethods.find((item) => item.id === input.dataset.printMethodCost);
+      if (method) method.unitCost = Number(input.value || 0);
+    });
+    saveState();
+  });
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
     ? "Completa los costos de taller. El precio final se actualiza para vendedores en tiempo real."
@@ -1577,10 +1696,12 @@ async function createOrder(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const product = state.products.find((item) => item.name === data.product);
+  const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
   const quantity = Number(data.quantity || 0);
   const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
   const commissionRate = Number(state.quoteConfig?.policy?.commissionRate || 0);
-  const isOrder = data.requestType === "pedido";
+  const isFactory = product?.source === "fabrica";
+  const isOrder = data.requestType === "pedido" && !isFactory;
   if (!product) {
     alert("Selecciona un producto con stock disponible.");
     return;
@@ -1602,6 +1723,13 @@ async function createOrder(event) {
     clientEmail: data.clientEmail,
     deliveryAddress: data.deliveryAddress,
     product: data.product,
+    productCategory: product.category || inferProductCategory(product.name),
+    productVariant: product.variant || "",
+    productColor: product.color || "",
+    printMethodId: printMethod?.id || "sin-impresion",
+    printMethod: printMethod?.name || "Sin impresion",
+    baseUnitCost: product.source === "fabrica" ? Number(product.price || 0) : purchaseUnitCost(product.productCode),
+    printUnitCost: Number(printMethod?.unitCost || 0),
     quantity,
     saleUnitPrice,
     saleTotal: saleUnitPrice * quantity,
@@ -1612,7 +1740,7 @@ async function createOrder(event) {
     inventoryState: isOrder ? "reserved" : "",
     requestedDate: data.requestedDate,
     committedDate: "",
-    requestType: data.requestType,
+    requestType: isFactory ? "presupuesto" : data.requestType,
     referenceImage,
     referenceFileName: referenceFile?.name || "",
     referenceFileType: referenceFile?.type || "",
@@ -1741,20 +1869,25 @@ async function createPurchase(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const invoiceImage = await readImage(form.invoiceImage.files[0]);
-  state.finance.transactions.push({
+  const purchase = {
     id: uid(),
     type: "compra",
     amount: Number(data.amount || 0),
     quantity: Number(data.quantity || 0),
     productCode: cleanProductCode(data.productCode),
     productDescription: data.productDescription,
+    category: data.category,
+    variant: data.variant,
+    color: data.color,
+    source: data.source,
     date: data.date,
     reference: data.reference,
     description: data.description,
     invoiceImage,
     createdAt: Date.now()
-  });
-  ensureProductForPurchase(data.productCode, data.productDescription);
+  };
+  state.finance.transactions.push(purchase);
+  ensureProductForPurchase(purchase);
   ensurePricingForCode(data.productCode, data.productDescription);
   recalculatePricingForCode(data.productCode);
   form.reset();
@@ -1877,13 +2010,13 @@ function resolveDate(event) {
 function convertQuote(orderId) {
   const order = state.orders.find((item) => item.id === orderId);
   const product = state.products.find((item) => item.name === order.product);
-  if (!product || inventoryFor(product.productCode).available < Number(order.quantity || 0)) {
+  if (!product || (product.source !== "fabrica" && inventoryFor(product.productCode).available < Number(order.quantity || 0))) {
     alert("No hay stock suficiente para convertir este presupuesto en pedido.");
     return;
   }
   order.requestType = "pedido";
   order.stockCode = cleanProductCode(product.productCode);
-  order.inventoryState = "reserved";
+  order.inventoryState = product.source === "fabrica" ? "external" : "reserved";
   order.status = "pedido_planeamiento";
   order.comment = "Presupuesto aceptado por el cliente. Vuelve a planeamiento para aprobacion de pedido.";
   saveState();

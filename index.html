@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-11" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-12" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -95,6 +95,8 @@
               </label>
             </div>
 
+            <div class="product-category-grid" id="productCategoryGrid" aria-label="Elegir tipo de producto"></div>
+
             <div class="form-grid">
               <label class="field">
                 <span>Cliente</span>
@@ -102,8 +104,12 @@
                 <datalist id="clientList"></datalist>
               </label>
               <label class="field">
-                <span>Producto</span>
+                <span id="productVariantLabel">Producto base</span>
                 <select name="product" id="productSelect" required></select>
+              </label>
+              <label class="field">
+                <span>Tipo de impresion</span>
+                <select name="printMethod" id="printMethodSelect" required></select>
               </label>
               <label class="field">
                 <span>Telefono</span>
@@ -126,6 +132,8 @@
                 <input name="saleUnitPrice" id="saleUnitPrice" type="number" min="0" step="0.01" required />
               </label>
             </div>
+
+            <div class="print-recommendation" id="printRecommendation"></div>
 
             <div class="sale-preview" id="salePreview"></div>
 
@@ -225,6 +233,33 @@
                   <input name="leadTime" type="number" min="1" required placeholder="7" />
                 </label>
               </div>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Categoria</span>
+                  <select name="category" required>
+                    <option value="bolsa">Bolsa</option>
+                    <option value="remera">Remera</option>
+                    <option value="gorra">Gorra</option>
+                    <option value="lapicera">Lapicera</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Variante / medida / talle</span>
+                  <input name="variant" required placeholder="40x30x10, M, trucker..." />
+                </label>
+                <label class="field">
+                  <span>Color base</span>
+                  <input name="color" required placeholder="Blanco, beige, negro..." />
+                </label>
+                <label class="field">
+                  <span>Origen</span>
+                  <select name="source">
+                    <option value="taller">Stock propio / taller</option>
+                    <option value="fabrica">Catalogo de fabrica</option>
+                  </select>
+                </label>
+              </div>
               <button class="primary-button full" type="submit">Publicar producto</button>
             </form>
 
@@ -263,6 +298,7 @@
                 <p id="commercialCostHelp">Costo de compra, costos de taller y precio final por producto.</p>
               </div>
             </div>
+            <div class="print-method-costs" id="printMethodCostTable"></div>
             <div class="finance-table-wrap" id="commercialCostTable"></div>
           </div>
 
@@ -755,6 +791,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-11"></script>
+    <script src="./app.js?v=signum-ops-12"></script>
   </body>
 </html>
