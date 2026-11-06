@@ -955,6 +955,7 @@ function updateProductConfiguration(resetPrice = true) {
     form.querySelector('[name="requestType"][value="presupuesto"]').checked = true;
   } else {
     orderRadio.disabled = false;
+    orderRadio.checked = true;
   }
   $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}</p>` : "";
   updateSalePreview(resetPrice);
