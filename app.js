@@ -297,7 +297,8 @@ function normalizeState(rawState) {
     variant: "",
     ...product,
     category: product.category || inferProductCategory(product.name),
-    color: product.color || inferProductColor(product.name)
+    color: product.color || inferProductColor(product.name),
+    pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
   }));
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.finance ||= structuredClone(seedState.finance);
@@ -785,6 +786,21 @@ function inferProductColor(value = "") {
   return "";
 }
 
+function inferPressUnitsPerPass(value = "") {
+  const text = String(value).toLowerCase().replace(/\s/g, "");
+  if (text.includes("30x30")) return 3;
+  if (text.includes("40x45") || text.includes("45x40")) return 1;
+  const dimensions = text.match(/(\d+(?:[.,]\d+)?)x(\d+(?:[.,]\d+)?)/);
+  if (dimensions) {
+    const width = Number(dimensions[1].replace(",", "."));
+    const height = Number(dimensions[2].replace(",", "."));
+    const normal = Math.floor(60 / width) * Math.floor(50 / height);
+    const rotated = Math.floor(60 / height) * Math.floor(50 / width);
+    return Math.max(1, normal, rotated);
+  }
+  return 1;
+}
+
 const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", otro: "Otros" };
 
 function categoryIcon(category) {
@@ -813,6 +829,18 @@ function orderProducts() {
 function availablePrintMethods(product) {
   const category = product?.category || inferProductCategory(product?.name);
   return state.printMethods.filter((method) => method.active && method.categories.includes(category) && (!method.lightOnly || isLightColor(product?.color)));
+}
+
+function printMethodCostForProduct(method, product) {
+  if (!method) return 0;
+  if (method.id !== "sublimacion" || (product?.category || inferProductCategory(product?.name)) !== "bolsa") return Number(method.unitCost || 0);
+  const breakdown = method.breakdown || {};
+  const unitsPerPass = Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`)));
+  const passCost = Number(breakdown.pressWear || 0) + Number(breakdown.labor || 0) + Number(breakdown.electricity || 0);
+  const unitCost = Object.entries(breakdown)
+    .filter(([field]) => !["pressWear", "labor", "electricity"].includes(field))
+    .reduce((sum, [, value]) => sum + Number(value || 0), 0);
+  return unitCost + passCost / unitsPerPass;
 }
 
 function commercialCostDefaults(sourceState = state) {
@@ -924,7 +952,7 @@ function updateProductConfiguration(resetPrice = true) {
   const product = state.products.find((item) => item.name === form.product.value);
   const methods = availablePrintMethods(product);
   const recommended = methods.find((method) => method.id === "sublimacion") || methods.find((method) => method.id === "dtf") || methods.find((method) => method.id === "grabado") || methods[0];
-  $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(method.unitCost)}</option>`).join("");
+  $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(printMethodCostForProduct(method, product))}</option>`).join("");
   const factory = product?.source === "fabrica";
   const orderRadio = form.querySelector('[name="requestType"][value="pedido"]');
   if (factory) {
@@ -1319,7 +1347,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const product = state.products.find((item) => item.name === form.product.value);
   const method = state.printMethods.find((item) => item.id === form.printMethod.value);
   const baseCost = productBaseCost(product);
-  const printCost = Number(method?.unitCost || 0);
+  const printCost = printMethodCostForProduct(method, product);
   const rate = totalCommissionRate();
   const directCost = baseCost + printCost;
   const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
@@ -1418,7 +1446,7 @@ function ensureProductForPurchase(purchase) {
     product = {
       id: uid(), productCode: code, name: purchase.productDescription || code, price: purchaseUnitCost(code),
       category: purchase.category || inferProductCategory(purchase.productDescription), variant: purchase.variant || "",
-      color: purchase.color || "", minimum: 1, source: purchase.source || "taller", leadTime: 7, active: true
+      color: purchase.color || "", pressUnitsPerPass: inferPressUnitsPerPass(`${purchase.productDescription || ""} ${purchase.variant || ""}`), minimum: 1, source: purchase.source || "taller", leadTime: 7, active: true
     };
     state.products.push(product);
   } else {
@@ -1581,7 +1609,7 @@ function renderCommercialCosts() {
     return;
   }
   container.innerHTML = `<table class="finance-table commercial-cost-table">
-    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
+    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Unidades por pasada</th><th>Sublimacion ajustada</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
     <tbody>${codes.map((code) => {
       const purchase = (state.finance.transactions || []).find((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
       const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
@@ -1590,6 +1618,8 @@ function renderCommercialCosts() {
         <td><strong>${escapeHtml(code)}</strong><br><span class="meta">${escapeHtml(product?.name || purchase?.productDescription || code)}</span></td>
         <td class="number-cell">${inventoryFor(code).available}</td>
         <td class="number-cell"><strong>${money(purchaseUnitCost(code))}</strong></td>
+        <td>${directionCanEdit ? `<input class="table-input cost-input" type="number" min="1" step="1" value="${Math.max(1, Number(product?.pressUnitsPerPass || 1))}" data-press-units>` : Math.max(1, Number(product?.pressUnitsPerPass || 1))}</td>
+        <td class="number-cell"><strong data-adjusted-print-cost>${money(printMethodCostForProduct(state.printMethods.find((method) => method.id === "sublimacion"), product))}</strong></td>
         <td>${directionCanEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing.manualCost || 0)}" data-cost-field="manualCost" placeholder="Usa compra">` : pricing.manualCost ? money(pricing.manualCost) : "Usa compra"}</td>
         <td>${directionCanEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
         <td class="number-cell"><strong data-cost-total>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
@@ -1601,6 +1631,8 @@ function renderCommercialCosts() {
     const code = button.dataset.saveCost;
     const row = button.closest("tr");
     const pricing = ensurePricingForCode(code);
+    const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
+    if (product) product.pressUnitsPerPass = Math.max(1, Number(row.querySelector("[data-press-units]")?.value || 1));
     row.querySelectorAll("[data-cost-field]").forEach((input) => {
       pricing[input.dataset.costField] = input.type === "checkbox" ? input.checked : Number(input.value || 0);
     });
@@ -1623,6 +1655,14 @@ function renderCommercialCosts() {
     row.querySelector('[data-cost-total]').textContent = money(subtotal + iva);
   }));
   $$('#commercialCostTable [data-cost-field="iva"]').forEach((input) => input.addEventListener("change", () => input.dispatchEvent(new Event("input"))));
+  $$('#commercialCostTable [data-press-units]').forEach((input) => input.addEventListener("input", () => {
+    const row = input.closest("tr");
+    const code = row.dataset.costRow;
+    const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
+    if (!product) return;
+    const previewProduct = { ...product, pressUnitsPerPass: Math.max(1, Number(input.value || 1)) };
+    row.querySelector("[data-adjusted-print-cost]").textContent = money(printMethodCostForProduct(state.printMethods.find((method) => method.id === "sublimacion"), previewProduct));
+  }));
 }
 
 function renderBusiness() {
@@ -1816,7 +1856,7 @@ async function createOrder(event) {
     printMethodId: printMethod?.id || "sin-impresion",
     printMethod: printMethod?.name || "Sin impresion",
     baseUnitCost: productBaseCost(product),
-    printUnitCost: Number(printMethod?.unitCost || 0),
+    printUnitCost: printMethodCostForProduct(printMethod, product),
     quantity,
     sellerUnitCost,
     saleMarkup,
