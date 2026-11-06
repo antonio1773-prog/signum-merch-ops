@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-14" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-15" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -573,62 +573,6 @@
             </form>
           </div>
 
-          <div class="panel pricing-panel">
-            <div class="section-header compact">
-              <div>
-                <h3>Pricing de productos</h3>
-                <p>El precio final combina producto base, proceso o impresion y comisiones.</p>
-              </div>
-            </div>
-
-            <div class="pricing-equation">
-              <span>Producto base</span><b>+</b><span>Proceso / impresion</span><b>+</b><span>Comisiones</span><b>=</b><strong>Precio final sugerido</strong>
-            </div>
-
-            <div class="commercial-cost-panel" id="commercialCostPanel">
-              <div class="section-header compact">
-                <div>
-                  <h3>Estructura de pricing</h3>
-                  <p id="commercialCostHelp">Configura cada componente del precio.</p>
-                </div>
-              </div>
-              <div class="print-method-costs" id="printMethodCostTable"></div>
-              <div class="finance-table-wrap" id="commercialCostTable"></div>
-            </div>
-
-            <form id="pricingForm" class="pricing-form">
-              <h3>Costo del producto base</h3>
-              <div class="form-grid">
-                <label class="field">
-                  <span>Codigo producto</span>
-                  <input name="productCode" list="purchaseCodeList" required placeholder="REM-001" />
-                </label>
-                <label class="field">
-                  <span>Producto</span>
-                  <input name="productName" required placeholder="Remera sublimada" />
-                </label>
-              </div>
-              <label class="field">
-                <span>Descripcion</span>
-                <input name="description" placeholder="Material, tecnica, presentacion" />
-              </label>
-              <div class="pricing-grid">
-                <label class="field">
-                  <span>Costo base manual</span>
-                  <input name="manualCost" type="number" min="0" step="1" placeholder="Usa compra si queda vacio" />
-                </label>
-                <label class="field check-field">
-                  <span>IVA</span>
-                  <label><input name="iva" type="checkbox" /> Sumar 21%</label>
-                </label>
-              </div>
-              <div class="pricing-preview" id="pricingPreview"></div>
-              <button class="primary-button full" type="submit">Guardar pricing</button>
-            </form>
-
-            <div class="finance-table-wrap" id="pricingTable"></div>
-          </div>
-
           <div class="business-layout">
             <div class="panel">
               <h3>Resumen comercial</h3>
@@ -638,6 +582,48 @@
               <h3>Movimientos cargados</h3>
               <div class="finance-table-wrap" id="financeTable"></div>
             </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-pricing" aria-label="Pricing">
+          <div class="section-header">
+            <div>
+              <h2>Pricing</h2>
+              <p>Configura producto, impresion y comision en tres pasos.</p>
+            </div>
+          </div>
+
+          <div class="pricing-equation">
+            <span>1. Producto</span><b>+</b><span>2. Impresion</span><b>+</b><span>3. Comision</span><b>=</b><strong>Precio sugerido</strong>
+          </div>
+
+          <div class="panel pricing-panel">
+            <div class="commercial-cost-panel" id="commercialCostPanel">
+              <div class="section-header compact">
+                <div>
+                  <h3>Configurar precios</h3>
+                  <p id="commercialCostHelp">Completa solamente los valores que necesites cambiar.</p>
+                </div>
+              </div>
+              <div class="print-method-costs" id="printMethodCostTable"></div>
+              <div class="finance-table-wrap" id="commercialCostTable"></div>
+            </div>
+
+            <details class="pricing-advanced">
+              <summary>Agregar o corregir un costo de producto</summary>
+              <form id="pricingForm" class="pricing-form">
+                <div class="form-grid">
+                  <label class="field"><span>Codigo</span><input name="productCode" list="purchaseCodeList" required placeholder="REM-001" /></label>
+                  <label class="field"><span>Producto</span><input name="productName" required placeholder="Remera base" /></label>
+                  <label class="field"><span>Costo base manual</span><input name="manualCost" type="number" min="0" step="1" placeholder="Usa compra si queda vacio" /></label>
+                  <label class="field check-field"><span>IVA</span><label><input name="iva" type="checkbox" /> Sumar 21%</label></label>
+                </div>
+                <input name="description" type="hidden" value="Ajuste desde Pricing" />
+                <div class="pricing-preview" id="pricingPreview"></div>
+                <button class="primary-button" type="submit">Guardar costo base</button>
+              </form>
+              <div class="finance-table-wrap" id="pricingTable"></div>
+            </details>
           </div>
         </section>
 
@@ -771,6 +757,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-14"></script>
+    <script src="./app.js?v=signum-ops-15"></script>
   </body>
 </html>

@@ -187,6 +187,7 @@ const viewTitles = {
   capacity: "Agenda de produccion",
   metrics: "Indicadores",
   business: "Seguimiento del negocio",
+  pricing: "Pricing",
   crm: "CRM de clientes",
   users: "Accesos"
 };
@@ -199,6 +200,7 @@ const tabs = {
   capacity: "Agenda",
   metrics: "Indicadores",
   business: "Negocio",
+  pricing: "Pricing",
   crm: "CRM",
   users: "Accesos"
 };
@@ -243,6 +245,9 @@ const remoteStateId = supabaseSettings.stateId || "signum-merch-ops";
 const supabaseClient = hasRemoteStore ? window.supabase.createClient(supabaseSettings.url, supabaseSettings.anonKey) : null;
 let remoteReady = false;
 let remoteSaveTimer = null;
+let remoteUpdatedAt = "";
+let remoteWritePending = false;
+let remotePollTimer = null;
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -380,6 +385,7 @@ function normalizeState(rawState) {
 
 function saveState() {
   localStorage.setItem(storeKey, JSON.stringify(state));
+  remoteWritePending = true;
   queueRemoteSave();
   channel?.postMessage({ type: "state-change" });
   render();
@@ -394,15 +400,19 @@ function queueRemoteSave() {
 async function saveRemoteState() {
   if (!supabaseClient) return;
   try {
+    const updatedAt = new Date().toISOString();
     const { error } = await supabaseClient.from("app_state").upsert({
       id: remoteStateId,
       data: state,
-      updated_at: new Date().toISOString()
+      updated_at: updatedAt
     });
     if (error) throw error;
+    remoteUpdatedAt = updatedAt;
+    remoteWritePending = false;
     remoteReady = true;
     renderSyncStatus();
   } catch {
+    remoteWritePending = false;
     remoteReady = false;
     renderSyncStatus("No se pudo guardar en la nube.");
   }
@@ -411,11 +421,13 @@ async function saveRemoteState() {
 async function initializeRemoteState() {
   renderSyncStatus();
   if (!supabaseClient) return;
+  startRemotePolling();
   try {
-    const { data, error } = await supabaseClient.from("app_state").select("data").eq("id", remoteStateId).maybeSingle();
+    const { data, error } = await supabaseClient.from("app_state").select("data,updated_at").eq("id", remoteStateId).maybeSingle();
     if (error) throw error;
     if (data?.data) {
       state = normalizeState(data.data);
+      remoteUpdatedAt = data.updated_at || "";
       localStorage.setItem(storeKey, JSON.stringify(state));
     } else {
       const { error: insertError } = await supabaseClient.from("app_state").insert({ id: remoteStateId, data: state });
@@ -431,6 +443,29 @@ async function initializeRemoteState() {
   }
 }
 
+function startRemotePolling() {
+  if (!supabaseClient || remotePollTimer) return;
+  remotePollTimer = window.setInterval(pullRemoteState, 4000);
+}
+
+async function pullRemoteState() {
+  if (!supabaseClient || remoteWritePending) return;
+  try {
+    const { data, error } = await supabaseClient.from("app_state").select("data,updated_at").eq("id", remoteStateId).maybeSingle();
+    if (error) throw error;
+    if (!data?.data || !data.updated_at || data.updated_at === remoteUpdatedAt) return;
+    remoteUpdatedAt = data.updated_at;
+    state = normalizeState(data.data);
+    localStorage.setItem(storeKey, JSON.stringify(state));
+    remoteReady = true;
+    renderSyncStatus();
+    render();
+  } catch {
+    remoteReady = false;
+    renderSyncStatus("No se pudo actualizar desde la nube.");
+  }
+}
+
 function subscribeRemoteState() {
   if (!supabaseClient) return;
   supabaseClient
@@ -440,6 +475,7 @@ function subscribeRemoteState() {
       { event: "*", schema: "public", table: "app_state", filter: `id=eq.${remoteStateId}` },
       (payload) => {
         if (!payload.new?.data) return;
+        remoteUpdatedAt = payload.new.updated_at || remoteUpdatedAt;
         state = normalizeState(payload.new.data);
         localStorage.setItem(storeKey, JSON.stringify(state));
         remoteReady = true;
@@ -639,7 +675,7 @@ function render() {
   const user = currentUser();
   if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "quotes", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
   if (user.role !== "vendedor" && ["new-order", "my-orders"].includes(activeView)) activeView = "workflow";
-  if (user.role !== "direccion" && ["crm", "users", "business", "stock"].includes(activeView)) activeView = "workflow";
+  if (user.role !== "direccion" && ["crm", "users", "business", "pricing", "stock"].includes(activeView)) activeView = "workflow";
 
   $("#roleEyebrow").textContent = `${user.name} · ${roleLabels[user.role]}`;
   $("#pageTitle").textContent = activeView === "planning" && !canEditPlanning() ? "Promociones y dinamicas" : viewTitles[activeView];
@@ -705,7 +741,7 @@ function renderNav() {
   }
   const roleTabs =
     user.role === "direccion"
-      ? ["workflow", "quotes", "stock", "business", "planning", "capacity", "metrics", "crm", "users", "new-order"]
+      ? ["workflow", "quotes", "stock", "business", "pricing", "planning", "capacity", "metrics", "crm", "users", "new-order"]
       : user.role === "planeamiento"
         ? ["workflow", "quotes", "planning", "capacity", "metrics"]
         : ["workflow", "planning", "capacity", "metrics"];
@@ -1486,13 +1522,13 @@ function renderCommercialCosts() {
   $("#printMethodCostTable").innerHTML = `
     <div class="method-cost-heading"><div><h4>Costo por sistema de impresion</h4><p>Cada total se forma con la suma de sus componentes.</p></div></div>
     <div class="print-system-grid">${state.printMethods.map((method) => `
-      <article class="print-system-card" data-print-method="${method.id}">
-        <div class="print-system-head"><strong>${method.name}</strong><span>Total <b data-print-method-total>${money(method.unitCost || 0)}</b></span></div>
+      <details class="print-system-card" data-print-method="${method.id}">
+        <summary class="print-system-head"><strong>${method.name}</strong><span>Total <b data-print-method-total>${money(method.unitCost || 0)}</b></span></summary>
         <div class="print-breakdown-grid">${printCostFields.map(([field, label]) => `
           <label class="field"><span>${label}</span>${directionCanEdit
             ? `<input type="number" min="0" step="0.01" value="${Number(method.breakdown?.[field] || 0)}" data-print-cost-line="${field}">`
             : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
-      </article>`).join("")}</div>
+      </details>`).join("")}</div>
     <div class="commission-config">
       <div><h4>Comisiones comerciales</h4><p>Se calculan sobre el precio final de venta.</p></div>
       <label class="field"><span>Vendedor principal %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>

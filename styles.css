@@ -689,6 +689,27 @@ h3 {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.print-system-card > summary,
+.pricing-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.print-system-card > summary::-webkit-details-marker,
+.pricing-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.print-system-card > summary::after {
+  content: "+";
+  color: var(--purple-2);
+  font-size: 20px;
+}
+
+.print-system-card[open] > summary::after {
+  content: "−";
+}
+
 .print-system-head {
   display: flex;
   align-items: center;
@@ -739,6 +760,23 @@ h3 {
 .commission-config h4,
 .commission-config p {
   margin: 0;
+}
+
+.pricing-advanced {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.pricing-advanced > summary {
+  color: var(--purple-2);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pricing-advanced[open] > summary {
+  margin-bottom: 14px;
 }
 
 .commission-config p {
