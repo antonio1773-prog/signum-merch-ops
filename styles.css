@@ -561,7 +561,13 @@ h3 {
 }
 
 .sale-preview.compact {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#sellerUnitCost[readonly] {
+  color: var(--purple-2);
+  font-weight: 900;
+  background: rgba(122, 92, 250, 0.08);
 }
 
 .product-category-grid {

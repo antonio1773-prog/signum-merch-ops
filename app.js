@@ -368,6 +368,8 @@ function normalizeState(rawState) {
     inventoryState: "",
     saleUnitPrice: 0,
     saleTotal: 0,
+    sellerUnitCost: 0,
+    saleMarkup: 0,
     commissionRate: 0,
     commissionAmount: 0,
     productCategory: "",
@@ -591,7 +593,8 @@ function setup() {
   $("#orderForm").addEventListener("submit", createOrder);
   $("#productSelect").addEventListener("change", () => updateProductConfiguration(true));
   $("#printMethodSelect").addEventListener("change", () => updateSalePreview(true));
-  $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false));
+  $("#saleMarkup").addEventListener("input", () => updateSalePreview(false, "markup"));
+  $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false, "price"));
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
@@ -1310,7 +1313,7 @@ function orderRevenue(order) {
   return Number(order.saleTotal || 0) || productPrice(order.product) * Number(order.quantity || 0);
 }
 
-function updateSalePreview(resetPrice = false) {
+function updateSalePreview(resetPrice = false, changedField = "") {
   const form = $("#orderForm");
   if (!form || !$("#salePreview")) return;
   const product = state.products.find((item) => item.name === form.product.value);
@@ -1320,16 +1323,28 @@ function updateSalePreview(resetPrice = false) {
   const rate = totalCommissionRate();
   const directCost = baseCost + printCost;
   const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
-  const suggested = Math.ceil(rawSuggested / 50) * 50;
-  if (resetPrice || !form.saleUnitPrice.value) form.saleUnitPrice.value = suggested || "";
-  const unitPrice = Number(form.saleUnitPrice.value || 0);
+  const sellerCost = Math.ceil(rawSuggested / 50) * 50;
+  form.sellerUnitCost.value = sellerCost || "";
+  if (resetPrice || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
+    form.saleMarkup.value = 0;
+    form.saleUnitPrice.value = sellerCost || "";
+  } else if (changedField === "markup") {
+    const markup = Number(form.saleMarkup.value || 0);
+    form.saleUnitPrice.value = Math.round(sellerCost * (1 + markup / 100) * 100) / 100;
+  } else if (changedField === "price") {
+    const enteredPrice = Number(form.saleUnitPrice.value || 0);
+    form.saleMarkup.value = sellerCost ? Math.round(((enteredPrice / sellerCost) - 1) * 10000) / 100 : 0;
+  }
+  const markup = Number(form.saleMarkup.value || 0);
+  const unitPrice = Number(form.saleUnitPrice.value || sellerCost || 0);
   const quantity = Math.max(1, Number(form.quantity.value || 1));
   const total = unitPrice * quantity;
   const commission = total * rate / 100;
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
-    <div><span>Precio sugerido</span><strong>${money(suggested)}</strong></div>
+    <div><span>Costo a vendedor</span><strong>${money(sellerCost)}</strong></div>
+    <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
     <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
 }
@@ -1766,6 +1781,8 @@ async function createOrder(event) {
   const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
   const quantity = Number(data.quantity || 0);
   const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
+  const sellerUnitCost = Number(data.sellerUnitCost || 0);
+  const saleMarkup = Number(data.saleMarkup || 0);
   const commissionRate = totalCommissionRate();
   const isFactory = product?.source === "fabrica";
   const isOrder = data.requestType === "pedido" && !isFactory;
@@ -1798,6 +1815,8 @@ async function createOrder(event) {
     baseUnitCost: productBaseCost(product),
     printUnitCost: Number(printMethod?.unitCost || 0),
     quantity,
+    sellerUnitCost,
+    saleMarkup,
     saleUnitPrice,
     saleTotal: saleUnitPrice * quantity,
     commissionRate,
