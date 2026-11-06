@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-12" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-13" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -99,25 +99,12 @@
 
             <div class="form-grid">
               <label class="field">
-                <span>Cliente</span>
-                <input name="client" id="clientInput" list="clientList" required placeholder="Empresa o contacto" />
-                <datalist id="clientList"></datalist>
-              </label>
-              <label class="field">
                 <span id="productVariantLabel">Producto base</span>
                 <select name="product" id="productSelect" required></select>
               </label>
               <label class="field">
                 <span>Tipo de impresion</span>
                 <select name="printMethod" id="printMethodSelect" required></select>
-              </label>
-              <label class="field">
-                <span>Telefono</span>
-                <input name="clientPhone" id="clientPhoneInput" inputmode="tel" placeholder="Opcional" />
-              </label>
-              <label class="field">
-                <span>Mail</span>
-                <input name="clientEmail" id="clientEmailInput" type="email" placeholder="Opcional" />
               </label>
               <label class="field">
                 <span>Cantidad</span>
@@ -138,11 +125,6 @@
             <div class="sale-preview" id="salePreview"></div>
 
             <label class="field">
-              <span>Direccion de entrega</span>
-              <input name="deliveryAddress" placeholder="Calle, numero, localidad, piso o referencia" />
-            </label>
-
-            <label class="field">
               <span>Detalle</span>
               <textarea name="notes" rows="3" placeholder="Talles, colores, logo, entrega, observaciones"></textarea>
             </label>
@@ -155,6 +137,31 @@
                 accept="image/*,.pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
               />
             </label>
+
+            <div class="form-section-title">
+              <strong>Datos del cliente</strong>
+              <span>Completalos al finalizar la configuracion del producto.</span>
+            </div>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Cliente</span>
+                <input name="client" id="clientInput" list="clientList" required placeholder="Empresa o contacto" />
+                <datalist id="clientList"></datalist>
+              </label>
+              <label class="field">
+                <span>Telefono</span>
+                <input name="clientPhone" id="clientPhoneInput" inputmode="tel" placeholder="Opcional" />
+              </label>
+              <label class="field">
+                <span>Mail</span>
+                <input name="clientEmail" id="clientEmailInput" type="email" placeholder="Opcional" />
+              </label>
+              <label class="field">
+                <span>Direccion de entrega</span>
+                <input name="deliveryAddress" placeholder="Calle, numero, localidad, piso o referencia" />
+              </label>
+            </div>
 
             <div class="inline-note">
               <strong>Proceso:</strong>
@@ -791,6 +798,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-12"></script>
+    <script src="./app.js?v=signum-ops-13"></script>
   </body>
 </html>

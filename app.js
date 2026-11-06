@@ -36,10 +36,10 @@ const seedState = {
     { id: uid(), title: "Bonificacion volumen", description: "10% off en remeras desde 150 unidades. No acumulable.", priority: "media", expires: iso(1), active: true }
   ],
   printMethods: [
-    { id: "sublimacion", name: "Sublimacion", unitCost: 710, categories: ["bolsa", "remera"], lightOnly: true, active: true },
-    { id: "dtf", name: "DTF", unitCost: 650, categories: ["bolsa", "remera", "gorra"], lightOnly: false, active: true },
-    { id: "grabado", name: "Grabado / marcado", unitCost: 450, categories: ["bolsa", "lapicera"], lightOnly: false, active: true },
-    { id: "sin-impresion", name: "Sin impresion", unitCost: 0, categories: ["bolsa", "remera", "gorra", "lapicera", "otro"], lightOnly: false, active: true }
+    { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera"], lightOnly: true, active: true },
+    { id: "dtf", name: "DTF", unitCost: 650, breakdown: { material: 0, paperFilm: 200, ink: 120, adhesive: 50, printerWear: 80, pressWear: 0, labor: 150, design: 0, electricity: 20, other: 30 }, categories: ["bolsa", "remera", "gorra"], lightOnly: false, active: true },
+    { id: "grabado", name: "Grabado / marcado", unitCost: 450, breakdown: { material: 40, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 120, pressWear: 0, labor: 220, design: 40, electricity: 20, other: 10 }, categories: ["bolsa", "lapicera"], lightOnly: false, active: true },
+    { id: "sin-impresion", name: "Sin impresion", unitCost: 0, breakdown: { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 }, categories: ["bolsa", "remera", "gorra", "lapicera", "otro"], lightOnly: false, active: true }
   ],
   quoteConfig: {
     costs: {
@@ -266,6 +266,12 @@ function normalizeState(rawState) {
   });
   parsed.clients ||= [];
   parsed.printMethods ||= structuredClone(seedState.printMethods);
+  parsed.printMethods = parsed.printMethods.map((method) => {
+    const defaults = seedState.printMethods.find((item) => item.id === method.id);
+    const emptyBreakdown = { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 };
+    const breakdown = method.breakdown || { ...emptyBreakdown, material: Number(method.unitCost || 0) };
+    return { ...defaults, ...method, breakdown: { ...emptyBreakdown, ...breakdown } };
+  });
   parsed.quoteConfig ||= structuredClone(seedState.quoteConfig);
   parsed.quoteConfig.costs = { ...structuredClone(seedState.quoteConfig.costs), ...(parsed.quoteConfig.costs || {}) };
   parsed.quoteConfig.policy = { ...structuredClone(seedState.quoteConfig.policy), ...(parsed.quoteConfig.policy || {}) };
@@ -741,7 +747,17 @@ function inferProductColor(value = "") {
 }
 
 const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", otro: "Otros" };
-const categoryPositions = { bolsa: "0% 0%", gorra: "100% 0%", remera: "0% 100%", lapicera: "100% 100%", otro: "50% 50%" };
+
+function categoryIcon(category) {
+  const paths = {
+    bolsa: '<path d="M7 9h10l1 11H6L7 9Z"/><path d="M9 10V7a3 3 0 0 1 6 0v3"/>',
+    remera: '<path d="m8 4-5 3 2 4 3-1v10h8V10l3 1 2-4-5-3c-1 2-7 2-8 0Z"/>',
+    gorra: '<path d="M5 14c0-6 3-9 7-9s7 3 7 9H5Z"/><path d="M12 14c3 0 7 1 9 3-4 1-8 1-11-1"/>',
+    lapicera: '<path d="m6 18 2-5L17 4l3 3-9 9-5 2Z"/><path d="m15 6 3 3M8 13l3 3"/>',
+    otro: '<path d="M4 7h16v13H4V7Z"/><path d="M9 7V4h6v3M4 12h16"/>'
+  };
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[category] || paths.otro}</svg>`;
+}
 
 function isLightColor(color = "") {
   const value = color.toLowerCase();
@@ -810,7 +826,7 @@ function renderProducts() {
   if (!categories.includes(activeProductCategory)) activeProductCategory = categories[0] || "";
   $("#productCategoryGrid").innerHTML = categories.map((category) => `
     <button class="product-category-card ${category === activeProductCategory ? "active" : ""}" type="button" data-product-category="${category}">
-      <span class="category-image" style="background-position:${categoryPositions[category] || categoryPositions.otro}"></span>
+      <span class="category-icon">${categoryIcon(category)}</span>
       <strong>${categoryLabels[category] || "Otros"}</strong>
     </button>`).join("");
   $$('[data-product-category]').forEach((button) => button.addEventListener("click", () => {
@@ -1465,19 +1481,40 @@ function renderCommercialCosts() {
     $("#printMethodCostTable").innerHTML = "";
     return;
   }
-  $("#printMethodCostTable").innerHTML = `<div class="method-cost-grid">${state.printMethods.map((method) => `
-    <label class="field"><span>${method.name}</span><input type="number" min="0" step="0.01" value="${Number(method.unitCost || 0)}" data-print-method-cost="${method.id}"></label>`).join("")}</div>
-    <button class="small-button" type="button" id="savePrintMethodCosts">Guardar costos de impresion</button>`;
-  $("#savePrintMethodCosts").addEventListener("click", () => {
-    $$('[data-print-method-cost]').forEach((input) => {
-      const method = state.printMethods.find((item) => item.id === input.dataset.printMethodCost);
-      if (method) method.unitCost = Number(input.value || 0);
+  const printCostFields = [
+    ["material", "Material / insumo"], ["paperFilm", "Hoja, film o transfer"], ["ink", "Tinta"],
+    ["adhesive", "Cinta o adhesivo"], ["printerWear", "Desgaste impresora"], ["pressWear", "Desgaste plancha / maquina"],
+    ["labor", "Mano de obra"], ["design", "Diseno"], ["electricity", "Electricidad"], ["other", "Otros"]
+  ];
+  const directionCanEdit = currentUser().role === "direccion";
+  $("#printMethodCostTable").innerHTML = `
+    <div class="method-cost-heading"><div><h4>Costo por sistema de impresion</h4><p>Cada total se forma con la suma de sus componentes.</p></div></div>
+    <div class="print-system-grid">${state.printMethods.map((method) => `
+      <article class="print-system-card" data-print-method="${method.id}">
+        <div class="print-system-head"><strong>${method.name}</strong><span>Total <b data-print-method-total>${money(method.unitCost || 0)}</b></span></div>
+        <div class="print-breakdown-grid">${printCostFields.map(([field, label]) => `
+          <label class="field"><span>${label}</span>${directionCanEdit
+            ? `<input type="number" min="0" step="0.01" value="${Number(method.breakdown?.[field] || 0)}" data-print-cost-line="${field}">`
+            : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
+      </article>`).join("")}</div>
+    ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar sistemas de impresion</button>' : ""}`;
+  $$('[data-print-cost-line]').forEach((input) => input.addEventListener("input", () => {
+    const card = input.closest("[data-print-method]");
+    const total = [...card.querySelectorAll("[data-print-cost-line]")].reduce((sum, field) => sum + Number(field.value || 0), 0);
+    card.querySelector("[data-print-method-total]").textContent = money(total);
+  }));
+  $("#savePrintMethodCosts")?.addEventListener("click", () => {
+    $$("[data-print-method]").forEach((card) => {
+      const method = state.printMethods.find((item) => item.id === card.dataset.printMethod);
+      if (!method) return;
+      card.querySelectorAll("[data-print-cost-line]").forEach((input) => { method.breakdown[input.dataset.printCostLine] = Number(input.value || 0); });
+      method.unitCost = Object.values(method.breakdown).reduce((sum, value) => sum + Number(value || 0), 0);
     });
     saveState();
   });
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
-    ? "Completa los costos de taller. El precio final se actualiza para vendedores en tiempo real."
+    ? directionCanEdit ? "Completa los costos de cada impresion y de cada producto. Los precios se actualizan para vendedores en tiempo real." : "Consulta la composicion de costos definida por Direccion y completa los costos de cada producto."
     : "Consulta el costo completo y el precio final de cada producto con stock.";
   const codes = purchaseCodes()
     .map((item) => item.code)
