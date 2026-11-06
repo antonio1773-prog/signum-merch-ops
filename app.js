@@ -833,14 +833,9 @@ function availablePrintMethods(product) {
 
 function printMethodCostForProduct(method, product) {
   if (!method) return 0;
-  if (method.id !== "sublimacion" || (product?.category || inferProductCategory(product?.name)) !== "bolsa") return Number(method.unitCost || 0);
-  const breakdown = method.breakdown || {};
+  if (method.id === "sin-impresion" || (product?.category || inferProductCategory(product?.name)) !== "bolsa") return Number(method.unitCost || 0);
   const unitsPerPass = Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`)));
-  const passCost = Number(breakdown.pressWear || 0) + Number(breakdown.labor || 0) + Number(breakdown.electricity || 0);
-  const unitCost = Object.entries(breakdown)
-    .filter(([field]) => !["pressWear", "labor", "electricity"].includes(field))
-    .reduce((sum, [, value]) => sum + Number(value || 0), 0);
-  return unitCost + passCost / unitsPerPass;
+  return Number(method.unitCost || 0) / unitsPerPass;
 }
 
 function commercialCostDefaults(sourceState = state) {
