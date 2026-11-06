@@ -754,7 +754,7 @@ h3 {
 
 .commission-config {
   display: grid;
-  grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(150px, 1fr));
+  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(140px, 1fr));
   align-items: end;
   gap: 12px;
   margin: 14px 0 12px;

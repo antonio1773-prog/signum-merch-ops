@@ -47,7 +47,7 @@ const seedState = {
       pressDepreciation: 41.43, electricity: 10, laborHourValue: 8000, unitsPerBatch: 100,
       hoursPerBatch: 4, inkMlPerUnit: 1.5, tapeCmPerUnit: 20
     },
-    policy: { wasteRate: 3, taxRate: 2, commissionRate: 20, secondSellerCommissionRate: 0, targetMarginRate: 10, roundingMultiple: 50 },
+    policy: { wasteRate: 3, taxRate: 2, commissionRate: 20, secondSellerCommissionRate: 0, suggestedMarkupRate: 30, targetMarginRate: 10, roundingMultiple: 50 },
     products: [{
       id: "friselina-sublimada", name: "Bolsas de friselina sublimadas", material: "Friselina 80 g",
       colors: ["Blanco", "Beige", "Negro"], active: true,
@@ -862,7 +862,7 @@ function renderProducts() {
   const activeProducts = state.products.filter((product) => product.active);
   const selectable = orderProducts();
   const categories = [...new Set(selectable.map((product) => product.category || inferProductCategory(product.name)))];
-  if (!categories.includes(activeProductCategory)) activeProductCategory = categories[0] || "";
+  if (!categories.includes(activeProductCategory)) activeProductCategory = categories.includes("bolsa") ? "bolsa" : categories[0] || "";
   $("#productCategoryGrid").innerHTML = categories.map((category) => `
     <button class="product-category-card ${category === activeProductCategory ? "active" : ""}" type="button" data-product-category="${category}">
       <span class="category-icon">${categoryIcon(category)}</span>
@@ -1326,8 +1326,9 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
   form.sellerUnitCost.value = sellerCost || "";
   if (resetPrice || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
-    form.saleMarkup.value = 0;
-    form.saleUnitPrice.value = sellerCost || "";
+    const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
+    form.saleMarkup.value = suggestedMarkup;
+    form.saleUnitPrice.value = Math.round(sellerCost * (1 + suggestedMarkup / 100) * 100) / 100 || "";
   } else if (changedField === "markup") {
     const markup = Number(form.saleMarkup.value || 0);
     form.saleUnitPrice.value = Math.round(sellerCost * (1 + markup / 100) * 100) / 100;
@@ -1545,9 +1546,10 @@ function renderCommercialCosts() {
             : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
       </details>`).join("")}</div>
     <div class="commission-config">
-      <div><h4>Comisiones comerciales</h4><p>Se calculan sobre el precio final de venta.</p></div>
+      <div><h4>Comisiones y sugerencia comercial</h4><p>Define comisiones y el markup inicial que verá el vendedor.</p></div>
       <label class="field"><span>Vendedor principal %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>
       <label class="field"><span>Segundo vendedor %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}" id="secondCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}%</strong>`}</label>
+      <label class="field"><span>Markup sugerido al vendedor %</span>${directionCanEdit ? `<input type="number" min="0" step="0.01" value="${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}" id="suggestedMarkupRate">` : `<strong>${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}%</strong>`}</label>
     </div>
     ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar estructura de pricing</button>' : ""}`;
   $$('[data-print-cost-line]').forEach((input) => input.addEventListener("input", () => {
@@ -1564,6 +1566,7 @@ function renderCommercialCosts() {
     });
     state.quoteConfig.policy.commissionRate = Number($("#primaryCommissionRate")?.value || 0);
     state.quoteConfig.policy.secondSellerCommissionRate = Number($("#secondCommissionRate")?.value || 0);
+    state.quoteConfig.policy.suggestedMarkupRate = Number($("#suggestedMarkupRate")?.value || 0);
     saveState();
   });
   const canEdit = canEditPlanning();
