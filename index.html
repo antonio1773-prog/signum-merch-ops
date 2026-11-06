@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-13" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-14" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -298,17 +298,6 @@
             </form>
           </div>
 
-          <div class="panel commercial-cost-panel" id="commercialCostPanel">
-            <div class="section-header compact">
-              <div>
-                <h3>Costos y precios disponibles</h3>
-                <p id="commercialCostHelp">Costo de compra, costos de taller y precio final por producto.</p>
-              </div>
-            </div>
-            <div class="print-method-costs" id="printMethodCostTable"></div>
-            <div class="finance-table-wrap" id="commercialCostTable"></div>
-          </div>
-
           <div class="catalog-grid" id="planningCatalogGrid">
             <div id="productCatalogPanel">
               <h3>Catalogo activo</h3>
@@ -588,11 +577,27 @@
             <div class="section-header compact">
               <div>
                 <h3>Pricing de productos</h3>
-                <p>Arma el precio con costo de compra, produccion, sublimacion, vendedores e IVA.</p>
+                <p>El precio final combina producto base, proceso o impresion y comisiones.</p>
               </div>
             </div>
 
+            <div class="pricing-equation">
+              <span>Producto base</span><b>+</b><span>Proceso / impresion</span><b>+</b><span>Comisiones</span><b>=</b><strong>Precio final sugerido</strong>
+            </div>
+
+            <div class="commercial-cost-panel" id="commercialCostPanel">
+              <div class="section-header compact">
+                <div>
+                  <h3>Estructura de pricing</h3>
+                  <p id="commercialCostHelp">Configura cada componente del precio.</p>
+                </div>
+              </div>
+              <div class="print-method-costs" id="printMethodCostTable"></div>
+              <div class="finance-table-wrap" id="commercialCostTable"></div>
+            </div>
+
             <form id="pricingForm" class="pricing-form">
+              <h3>Costo del producto base</h3>
               <div class="form-grid">
                 <label class="field">
                   <span>Codigo producto</span>
@@ -609,40 +614,8 @@
               </label>
               <div class="pricing-grid">
                 <label class="field">
-                  <span>Costo manual</span>
+                  <span>Costo base manual</span>
                   <input name="manualCost" type="number" min="0" step="1" placeholder="Usa compra si queda vacio" />
-                </label>
-                <label class="field">
-                  <span>Costo produccion</span>
-                  <input name="productionCost" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Hoja sublimacion</span>
-                  <input name="sublimationSheet" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Desgaste maquina</span>
-                  <input name="machineWear" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Mano de obra</span>
-                  <input name="labor" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Diseno</span>
-                  <input name="design" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Electricidad</span>
-                  <input name="electricity" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Vendedor 1</span>
-                  <input name="seller1" type="number" min="0" step="1" value="0" />
-                </label>
-                <label class="field">
-                  <span>Vendedor 2</span>
-                  <input name="seller2" type="number" min="0" step="1" value="0" />
                 </label>
                 <label class="field check-field">
                   <span>IVA</span>
@@ -798,6 +771,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-13"></script>
+    <script src="./app.js?v=signum-ops-14"></script>
   </body>
 </html>

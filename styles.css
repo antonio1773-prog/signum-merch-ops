@@ -633,6 +633,31 @@ h3 {
   border-bottom: 1px solid var(--line);
 }
 
+.pricing-equation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 18px;
+  padding: 13px;
+  border: 1px solid rgba(122, 92, 250, 0.35);
+  border-radius: 9px;
+  background: rgba(122, 92, 250, 0.08);
+}
+
+.pricing-equation span,
+.pricing-equation strong {
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+
+.pricing-equation b {
+  color: var(--purple-2);
+}
+
 .method-cost-heading {
   display: flex;
   justify-content: space-between;
@@ -698,6 +723,28 @@ h3 {
   padding: 10px 11px;
   border: 1px solid var(--line);
   border-radius: 7px;
+}
+
+.commission-config {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(2, minmax(150px, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 14px 0 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.commission-config h4,
+.commission-config p {
+  margin: 0;
+}
+
+.commission-config p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .form-section-title {
@@ -1474,7 +1521,8 @@ dialog::backdrop {
   }
 
   .print-system-grid,
-  .print-breakdown-grid {
+  .print-breakdown-grid,
+  .commission-config {
     grid-template-columns: 1fr;
   }
 

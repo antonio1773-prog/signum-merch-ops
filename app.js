@@ -47,7 +47,7 @@ const seedState = {
       pressDepreciation: 41.43, electricity: 10, laborHourValue: 8000, unitsPerBatch: 100,
       hoursPerBatch: 4, inkMlPerUnit: 1.5, tapeCmPerUnit: 20
     },
-    policy: { wasteRate: 3, taxRate: 2, commissionRate: 20, targetMarginRate: 10, roundingMultiple: 50 },
+    policy: { wasteRate: 3, taxRate: 2, commissionRate: 20, secondSellerCommissionRate: 0, targetMarginRate: 10, roundingMultiple: 50 },
     products: [{
       id: "friselina-sublimada", name: "Bolsas de friselina sublimadas", material: "Friselina 80 g",
       colors: ["Blanco", "Beige", "Negro"], active: true,
@@ -346,7 +346,7 @@ function normalizeState(rawState) {
     }
     pricing.purchaseCost = purchaseCost;
     const baseCost = Number(pricing.manualCost || 0) || purchaseCost;
-    pricing.subtotal = baseCost + Number(pricing.productionCost || 0) + Number(pricing.sublimationSheet || 0) + Number(pricing.machineWear || 0) + Number(pricing.labor || 0) + Number(pricing.design || 0) + Number(pricing.electricity || 0) + Number(pricing.seller1 || 0) + Number(pricing.seller2 || 0);
+    pricing.subtotal = baseCost;
     pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
     pricing.total = pricing.subtotal + pricing.ivaAmount;
     product.price = pricing.total;
@@ -1258,6 +1258,18 @@ function productPrice(productName) {
   return Number(state.products.find((product) => product.name === productName)?.price || 0);
 }
 
+function productBaseCost(product) {
+  if (!product) return 0;
+  if (product.source === "fabrica") return Number(product.price || 0);
+  const pricing = latestPricingForCode(product.productCode);
+  return Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
+}
+
+function totalCommissionRate() {
+  const policy = state.quoteConfig?.policy || {};
+  return Number(policy.commissionRate || 0) + Number(policy.secondSellerCommissionRate || 0);
+}
+
 function orderRevenue(order) {
   return Number(order.saleTotal || 0) || productPrice(order.product) * Number(order.quantity || 0);
 }
@@ -1267,9 +1279,9 @@ function updateSalePreview(resetPrice = false) {
   if (!form || !$("#salePreview")) return;
   const product = state.products.find((item) => item.name === form.product.value);
   const method = state.printMethods.find((item) => item.id === form.printMethod.value);
-  const baseCost = product?.source === "fabrica" ? Number(product?.price || 0) : purchaseUnitCost(product?.productCode) || Number(product?.price || 0);
+  const baseCost = productBaseCost(product);
   const printCost = Number(method?.unitCost || 0);
-  const rate = Number(state.quoteConfig?.policy?.commissionRate || 0);
+  const rate = totalCommissionRate();
   const directCost = baseCost + printCost;
   const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
   const suggested = Math.ceil(rawSuggested / 50) * 50;
@@ -1374,7 +1386,7 @@ function recalculatePricingForCode(productCode) {
   matching.forEach((item) => {
     item.purchaseCost = purchaseCost;
     const baseCost = Number(item.manualCost || 0) || purchaseCost;
-    item.subtotal = baseCost + Number(item.productionCost || 0) + Number(item.sublimationSheet || 0) + Number(item.machineWear || 0) + Number(item.labor || 0) + Number(item.design || 0) + Number(item.electricity || 0) + Number(item.seller1 || 0) + Number(item.seller2 || 0);
+    item.subtotal = baseCost;
     item.ivaAmount = item.iva ? item.subtotal * 0.21 : 0;
     item.total = item.subtotal + item.ivaAmount;
   });
@@ -1392,15 +1404,7 @@ function pricingFromForm(form) {
   const purchaseCost = purchaseUnitCost(productCode);
   const manualCost = Number(data.manualCost || 0);
   const baseCost = manualCost || purchaseCost;
-  const productionCost = Number(data.productionCost || 0);
-  const sublimationSheet = Number(data.sublimationSheet || 0);
-  const machineWear = Number(data.machineWear || 0);
-  const labor = Number(data.labor || 0);
-  const design = Number(data.design || 0);
-  const electricity = Number(data.electricity || 0);
-  const seller1 = Number(data.seller1 || 0);
-  const seller2 = Number(data.seller2 || 0);
-  const subtotal = baseCost + productionCost + sublimationSheet + machineWear + labor + design + electricity + seller1 + seller2;
+  const subtotal = baseCost;
   const ivaAmount = data.iva ? subtotal * 0.21 : 0;
   return {
     productCode,
@@ -1408,14 +1412,6 @@ function pricingFromForm(form) {
     description: data.description,
     manualCost,
     purchaseCost,
-    productionCost,
-    sublimationSheet,
-    machineWear,
-    labor,
-    design,
-    electricity,
-    seller1,
-    seller2,
     iva: Boolean(data.iva),
     subtotal,
     ivaAmount,
@@ -1497,7 +1493,12 @@ function renderCommercialCosts() {
             ? `<input type="number" min="0" step="0.01" value="${Number(method.breakdown?.[field] || 0)}" data-print-cost-line="${field}">`
             : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
       </article>`).join("")}</div>
-    ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar sistemas de impresion</button>' : ""}`;
+    <div class="commission-config">
+      <div><h4>Comisiones comerciales</h4><p>Se calculan sobre el precio final de venta.</p></div>
+      <label class="field"><span>Vendedor principal %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>
+      <label class="field"><span>Segundo vendedor %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}" id="secondCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}%</strong>`}</label>
+    </div>
+    ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar estructura de pricing</button>' : ""}`;
   $$('[data-print-cost-line]').forEach((input) => input.addEventListener("input", () => {
     const card = input.closest("[data-print-method]");
     const total = [...card.querySelectorAll("[data-print-cost-line]")].reduce((sum, field) => sum + Number(field.value || 0), 0);
@@ -1510,11 +1511,13 @@ function renderCommercialCosts() {
       card.querySelectorAll("[data-print-cost-line]").forEach((input) => { method.breakdown[input.dataset.printCostLine] = Number(input.value || 0); });
       method.unitCost = Object.values(method.breakdown).reduce((sum, value) => sum + Number(value || 0), 0);
     });
+    state.quoteConfig.policy.commissionRate = Number($("#primaryCommissionRate")?.value || 0);
+    state.quoteConfig.policy.secondSellerCommissionRate = Number($("#secondCommissionRate")?.value || 0);
     saveState();
   });
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
-    ? directionCanEdit ? "Completa los costos de cada impresion y de cada producto. Los precios se actualizan para vendedores en tiempo real." : "Consulta la composicion de costos definida por Direccion y completa los costos de cada producto."
+    ? directionCanEdit ? "Define producto base, procesos de impresion y comisiones. El vendedor recibe el precio final sugerido." : "Consulta la estructura de pricing definida por Direccion."
     : "Consulta el costo completo y el precio final de cada producto con stock.";
   const codes = purchaseCodes()
     .map((item) => item.code)
@@ -1523,13 +1526,8 @@ function renderCommercialCosts() {
     container.innerHTML = `<div class="empty-state">No hay productos con stock disponible.</div>`;
     return;
   }
-  const costFields = [
-    ["productionCost", "Produccion"], ["sublimationSheet", "Hoja"], ["machineWear", "Maquina"],
-    ["labor", "Mano de obra"], ["design", "Diseno"], ["electricity", "Electricidad"],
-    ["seller1", "Vendedor 1"], ["seller2", "Vendedor 2"]
-  ];
   container.innerHTML = `<table class="finance-table commercial-cost-table">
-    <thead><tr><th>Codigo / producto</th><th>Stock</th><th>Compra</th>${costFields.map(([, label]) => `<th>${label}</th>`).join("")}<th>IVA</th><th>Precio final</th>${canEdit ? "<th></th>" : ""}</tr></thead>
+    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
     <tbody>${codes.map((code) => {
       const purchase = (state.finance.transactions || []).find((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
       const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
@@ -1538,10 +1536,10 @@ function renderCommercialCosts() {
         <td><strong>${escapeHtml(code)}</strong><br><span class="meta">${escapeHtml(product?.name || purchase?.productDescription || code)}</span></td>
         <td class="number-cell">${inventoryFor(code).available}</td>
         <td class="number-cell"><strong>${money(purchaseUnitCost(code))}</strong></td>
-        ${costFields.map(([field]) => `<td>${canEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing[field] || 0)}" data-cost-field="${field}">` : money(pricing[field] || 0)}</td>`).join("")}
-        <td>${canEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
+        <td>${directionCanEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing.manualCost || 0)}" data-cost-field="manualCost" placeholder="Usa compra">` : pricing.manualCost ? money(pricing.manualCost) : "Usa compra"}</td>
+        <td>${directionCanEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
         <td class="number-cell"><strong data-cost-total>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
-        ${canEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar</button></td>` : ""}
+        ${directionCanEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar base</button></td>` : ""}
       </tr>`;
     }).join("")}</tbody></table>`;
 
@@ -1554,7 +1552,7 @@ function renderCommercialCosts() {
     });
     pricing.purchaseCost = purchaseUnitCost(code);
     const baseCost = Number(pricing.manualCost || 0) || pricing.purchaseCost;
-    pricing.subtotal = baseCost + Number(pricing.productionCost || 0) + Number(pricing.sublimationSheet || 0) + Number(pricing.machineWear || 0) + Number(pricing.labor || 0) + Number(pricing.design || 0) + Number(pricing.electricity || 0) + Number(pricing.seller1 || 0) + Number(pricing.seller2 || 0);
+    pricing.subtotal = baseCost;
     pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
     pricing.total = pricing.subtotal + pricing.ivaAmount;
     pricing.createdAt = Date.now();
@@ -1565,8 +1563,8 @@ function renderCommercialCosts() {
   $$('#commercialCostTable [data-cost-field]').forEach((input) => input.addEventListener("input", () => {
     const row = input.closest("tr");
     const code = row.dataset.costRow;
-    let subtotal = purchaseUnitCost(code);
-    row.querySelectorAll('[data-cost-field]:not([type="checkbox"])').forEach((field) => { subtotal += Number(field.value || 0); });
+    const manualCost = Number(row.querySelector('[data-cost-field="manualCost"]')?.value || 0);
+    const subtotal = manualCost || purchaseUnitCost(code);
     const iva = row.querySelector('[data-cost-field="iva"]')?.checked ? subtotal * 0.21 : 0;
     row.querySelector('[data-cost-total]').textContent = money(subtotal + iva);
   }));
@@ -1676,11 +1674,9 @@ function renderPricing() {
             <th>Codigo</th>
             <th>Producto</th>
             <th>Costo compra</th>
-            <th>Produccion</th>
-            <th>Sublimacion</th>
-            <th>Vendedores</th>
+            <th>Ajuste manual</th>
             <th>IVA</th>
-            <th>Precio final</th>
+            <th>Costo producto base</th>
             <th></th>
           </tr>
         </thead>
@@ -1691,10 +1687,8 @@ function renderPricing() {
                 <tr>
                   <td><strong>${item.productCode}</strong></td>
                   <td>${item.productName}<br /><span class="meta">${item.description || "-"}</span></td>
-                  <td class="number-cell">${money(item.manualCost || item.purchaseCost || 0)}</td>
-                  <td class="number-cell">${money(Number(item.productionCost || 0) + Number(item.labor || 0) + Number(item.design || 0) + Number(item.electricity || 0))}</td>
-                  <td class="number-cell">${money(Number(item.sublimationSheet || 0) + Number(item.machineWear || 0))}</td>
-                  <td class="number-cell">${money(Number(item.seller1 || 0) + Number(item.seller2 || 0))}</td>
+                  <td class="number-cell">${money(item.purchaseCost || 0)}</td>
+                  <td class="number-cell">${item.manualCost ? money(item.manualCost) : "Usa compra"}</td>
                   <td>${item.iva ? "Si" : "No"}</td>
                   <td class="number-cell"><strong>${money(item.total || 0)}</strong></td>
                   <td><button class="small-button danger-inline" type="button" data-remove-pricing="${item.id}">Eliminar</button></td>
@@ -1721,9 +1715,9 @@ function updatePricingPreview() {
   const pricing = pricingFromForm(form);
   $("#pricingPreview").innerHTML = `
     <div><span>Costo desde compras</span><strong>${money(pricing.purchaseCost)}</strong></div>
-    <div><span>Subtotal sin IVA</span><strong>${money(pricing.subtotal)}</strong></div>
+    <div><span>Costo base elegido</span><strong>${money(pricing.subtotal)}</strong></div>
     <div><span>IVA 21%</span><strong>${money(pricing.ivaAmount)}</strong></div>
-    <div><span>Precio final</span><strong>${money(pricing.total)}</strong></div>
+    <div><span>Costo producto base</span><strong>${money(pricing.total)}</strong></div>
   `;
 }
 
@@ -1736,7 +1730,7 @@ async function createOrder(event) {
   const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
   const quantity = Number(data.quantity || 0);
   const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
-  const commissionRate = Number(state.quoteConfig?.policy?.commissionRate || 0);
+  const commissionRate = totalCommissionRate();
   const isFactory = product?.source === "fabrica";
   const isOrder = data.requestType === "pedido" && !isFactory;
   if (!product) {
@@ -1765,7 +1759,7 @@ async function createOrder(event) {
     productColor: product.color || "",
     printMethodId: printMethod?.id || "sin-impresion",
     printMethod: printMethod?.name || "Sin impresion",
-    baseUnitCost: product.source === "fabrica" ? Number(product.price || 0) : purchaseUnitCost(product.productCode),
+    baseUnitCost: productBaseCost(product),
     printUnitCost: Number(printMethod?.unitCost || 0),
     quantity,
     saleUnitPrice,
@@ -1943,9 +1937,6 @@ function createPricing(event) {
   });
   recalculatePricingForCode(pricing.productCode);
   event.currentTarget.reset();
-  ["productionCost", "sublimationSheet", "machineWear", "labor", "design", "electricity", "seller1", "seller2"].forEach((name) => {
-    event.currentTarget[name].value = 0;
-  });
   updatePricingPreview();
   saveState();
 }
@@ -2273,8 +2264,8 @@ function saveQuoteConfig(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
   Object.keys(state.quoteConfig.costs).forEach((key) => { state.quoteConfig.costs[key] = Number(data[key] || 0); });
-  Object.keys(state.quoteConfig.policy).forEach((key) => { state.quoteConfig.policy[key] = Number(data[key] || 0); });
-  const totalRate = state.quoteConfig.policy.taxRate + state.quoteConfig.policy.commissionRate + state.quoteConfig.policy.targetMarginRate;
+  Object.keys(state.quoteConfig.policy).forEach((key) => { if (event.currentTarget.elements[key]) state.quoteConfig.policy[key] = Number(data[key] || 0); });
+  const totalRate = state.quoteConfig.policy.taxRate + totalCommissionRate() + state.quoteConfig.policy.targetMarginRate;
   if (totalRate >= 100 || state.quoteConfig.policy.wasteRate >= 100) {
     window.alert("Los porcentajes combinados deben ser menores a 100%.");
     return;
