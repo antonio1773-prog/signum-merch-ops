@@ -1406,14 +1406,23 @@ function estimatedMarginForDiscount(product, discountRate) {
   const methods = availablePrintMethods(product);
   const method = methods.find((item) => item.id === "sublimacion") || methods.find((item) => item.id === "dtf") || methods.find((item) => item.id === "grabado") || methods[0];
   const directCost = productBaseCost(product) + printMethodCostForProduct(method, product);
-  const commissionRate = totalCommissionRate();
-  const sellerCost = commissionRate < 100 ? directCost / (1 - commissionRate / 100) : directCost;
+  const commercialRate = totalCommercialRate();
+  const commissionRate = sellerCommissionRate();
+  const sellerCost = commercialRate < 100 ? directCost / (1 - commercialRate / 100) : directCost;
   const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
   const finalPrice = sellerCost * (1 + suggestedMarkup / 100) * (1 - Number(discountRate || 0) / 100);
   return finalPrice ? ((finalPrice - directCost - finalPrice * commissionRate / 100) / finalPrice) * 100 : -100;
 }
 
-function totalCommissionRate() {
+function signumMarginRate() {
+  return Number(state.quoteConfig?.policy?.commissionRate || 0);
+}
+
+function sellerCommissionRate() {
+  return Number(state.quoteConfig?.policy?.secondSellerCommissionRate || 0);
+}
+
+function totalCommercialRate() {
   const policy = state.quoteConfig?.policy || {};
   return Number(policy.commissionRate || 0) + Number(policy.secondSellerCommissionRate || 0);
 }
@@ -1429,9 +1438,10 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const method = state.printMethods.find((item) => item.id === form.printMethod.value);
   const baseCost = productBaseCost(product);
   const printCost = printMethodCostForProduct(method, product);
-  const rate = totalCommissionRate();
+  const commercialRate = totalCommercialRate();
+  const commissionRate = sellerCommissionRate();
   const directCost = baseCost + printCost;
-  const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
+  const rawSuggested = commercialRate < 100 ? directCost / (1 - commercialRate / 100) : directCost;
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
   const quantity = Math.max(1, Number(form.quantity.value || 1));
   const discountScale = discountScaleForProduct(product, quantity);
@@ -1452,7 +1462,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const markup = Number(form.saleMarkup.value || 0);
   const unitPrice = Number(form.saleUnitPrice.value || sellerCost || 0);
   const total = unitPrice * quantity;
-  const commission = total * rate / 100;
+  const commission = total * commissionRate / 100;
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
@@ -1460,7 +1470,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
     ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
-    <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
+    <div><span>Comision vendedor (${commissionRate}%)</span><strong>${money(commission)}</strong></div>`;
 }
 
 function financeTotals() {
@@ -1659,9 +1669,9 @@ function renderCommercialCosts() {
             : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
       </details>`).join("")}</div>
     <div class="commission-config">
-      <div><h4>Comisiones y sugerencia comercial</h4><p>Define comisiones y el markup inicial que verá el vendedor.</p></div>
-      <label class="field"><span>Vendedor principal %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>
-      <label class="field"><span>Segundo vendedor %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}" id="secondCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}%</strong>`}</label>
+      <div><h4>Margen y comision</h4><p>Define el margen de Signum, la comision del vendedor y el markup inicial.</p></div>
+      <label class="field"><span>Margen Signum %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>
+      <label class="field"><span>Comision vendedor %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}" id="secondCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}%</strong>`}</label>
       <label class="field"><span>Markup sugerido al vendedor %</span>${directionCanEdit ? `<input type="number" min="0" step="0.01" value="${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}" id="suggestedMarkupRate">` : `<strong>${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}%</strong>`}</label>
     </div>
     ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar estructura de pricing</button>' : ""}`;
@@ -1912,7 +1922,7 @@ async function createOrder(event) {
   const sellerUnitCost = Number(data.sellerUnitCost || 0);
   const saleMarkup = Number(data.saleMarkup || 0);
   const discountScale = discountScaleForProduct(product, quantity);
-  const commissionRate = totalCommissionRate();
+  const commissionRate = sellerCommissionRate();
   const isFactory = product?.source === "fabrica";
   const isOrder = data.requestType === "pedido" && !isFactory;
   if (!product) {
@@ -2562,7 +2572,7 @@ function saveQuoteConfig(event) {
   const data = Object.fromEntries(new FormData(event.currentTarget));
   Object.keys(state.quoteConfig.costs).forEach((key) => { state.quoteConfig.costs[key] = Number(data[key] || 0); });
   Object.keys(state.quoteConfig.policy).forEach((key) => { if (event.currentTarget.elements[key]) state.quoteConfig.policy[key] = Number(data[key] || 0); });
-  const totalRate = state.quoteConfig.policy.taxRate + totalCommissionRate() + state.quoteConfig.policy.targetMarginRate;
+  const totalRate = state.quoteConfig.policy.taxRate + totalCommercialRate() + state.quoteConfig.policy.targetMarginRate;
   if (totalRate >= 100 || state.quoteConfig.policy.wasteRate >= 100) {
     window.alert("Los porcentajes combinados deben ser menores a 100%.");
     return;

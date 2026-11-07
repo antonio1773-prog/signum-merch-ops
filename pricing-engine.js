@@ -39,7 +39,7 @@
   function calculateQuote(variant, config, quantity, offeredUnitPrice, printOption = {}) {
     const unit = calculateUnitCost(variant, config, printOption);
     const policy = config.policy;
-    const outsideRate = (number(policy.taxRate) + number(policy.commissionRate) + number(policy.targetMarginRate)) / 100;
+    const outsideRate = (number(policy.taxRate) + number(policy.commissionRate) + number(policy.secondSellerCommissionRate) + number(policy.targetMarginRate)) / 100;
     const technicalPrice = unit.unitCostRaw / (1 - outsideRate);
     const multiple = Math.max(1, number(policy.roundingMultiple));
     const suggestedPrice = Math.ceil(technicalPrice / multiple) * multiple;
@@ -48,7 +48,7 @@
     const saleTotal = unitPrice * units;
     const operationCost = unit.unitCost * units;
     const taxes = saleTotal * number(policy.taxRate) / 100;
-    const commission = saleTotal * number(policy.commissionRate) / 100;
+    const commission = saleTotal * number(policy.secondSellerCommissionRate) / 100;
     const signumResult = saleTotal - operationCost - taxes - commission;
     const marginRate = saleTotal ? signumResult / saleTotal * 100 : 0;
     return {
@@ -61,7 +61,7 @@
       operationCost: roundMoney(operationCost),
       taxes: roundMoney(taxes),
       commission: roundMoney(commission),
-      commissionPerUnit: roundMoney(unitPrice * number(policy.commissionRate) / 100),
+      commissionPerUnit: roundMoney(unitPrice * number(policy.secondSellerCommissionRate) / 100),
       signumResult: roundMoney(signumResult),
       marginRate: roundMoney(marginRate),
       profitPerUnit: roundMoney(signumResult / units),
