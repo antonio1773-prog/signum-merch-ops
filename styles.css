@@ -1450,6 +1450,16 @@ dialog::backdrop {
   background: rgba(0, 0, 0, 0.68);
 }
 
+#editOrderDialog {
+  width: min(920px, calc(100% - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+}
+
+.edit-order-form .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .dialog-card {
   padding: 18px;
 }
@@ -1492,6 +1502,9 @@ dialog::backdrop {
 }
 
 @media (max-width: 720px) {
+  .edit-order-form .form-grid {
+    grid-template-columns: 1fr;
+  }
   .app-shell {
     padding-left: 0;
     padding-top: 168px;
@@ -1556,8 +1569,32 @@ dialog::backdrop {
     padding: 18px;
   }
 
-  .sale-preview {
+  .sale-preview,
+  .sale-preview.compact {
     grid-template-columns: 1fr;
+  }
+
+  #orderForm,
+  #orderForm .form-grid,
+  #orderForm .field,
+  #orderForm input,
+  #orderForm select {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  #orderForm input,
+  #orderForm select {
+    width: 100%;
+  }
+
+  .sale-preview > div {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .sale-preview strong {
+    overflow-wrap: anywhere;
   }
 
   .product-category-grid {

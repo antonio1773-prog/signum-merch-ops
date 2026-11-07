@@ -303,6 +303,7 @@ function normalizeState(rawState) {
   }));
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.discountScales ||= [];
+  parsed.discountScales = parsed.discountScales.map((scale) => ({ discountType: "scale", starts: iso(), ...scale }));
   parsed.finance ||= structuredClone(seedState.finance);
   parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
   parsed.finance.transactions ||= [];
@@ -604,6 +605,13 @@ function setup() {
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#discountScaleForm").addEventListener("submit", createDiscountScale);
+  $("#discountScaleForm select[name='discountType']").addEventListener("change", (event) => {
+    const form = event.currentTarget.form;
+    const direct = event.currentTarget.value === "direct";
+    form.elements.minQuantity.disabled = direct;
+    form.elements.maxQuantity.disabled = direct;
+    if (direct) form.elements.minQuantity.value = 1;
+  });
   $("#clientForm").addEventListener("submit", createClient);
   $("#userForm").addEventListener("submit", createUser);
   $("#capitalForm").addEventListener("submit", updateCapital);
@@ -621,6 +629,8 @@ function setup() {
   $("#clearQuoteButton").addEventListener("click", clearQuoteForm);
   $("#planningDecisionForm").addEventListener("submit", resolvePlanningDecision);
   $("#dateForm").addEventListener("submit", resolveDate);
+  $("#editOrderForm").addEventListener("submit", saveEditedOrder);
+  $$('[data-close-edit-order]').forEach((button) => button.addEventListener('click', () => $("#editOrderDialog").close()));
 
   window.addEventListener("storage", (event) => {
     if (event.key === storeKey) {
@@ -636,6 +646,8 @@ function setup() {
   $("#orderForm input[name='requestedDate']").value = iso(7);
   $("#dynamicForm input[name='expires']").value = iso(1);
   $("#discountScaleForm input[name='expires']").value = iso(7);
+  $("#discountScaleForm input[name='starts']").value = iso();
+  $("#discountScaleForm select[name='discountType']").dispatchEvent(new Event("change"));
   $("#financeForm input[name='date']").value = iso(0);
   $("#purchaseForm input[name='date']").value = iso(0);
   render();
@@ -695,11 +707,12 @@ function render() {
   $("#navTabs").classList.toggle("is-hidden", user.role === "vendedor");
   $("#planningForms").classList.toggle("is-hidden", !canEditPlanning());
   $("#commercialCostPanel").classList.toggle("is-hidden", !canEditPlanning());
-  $("#productCatalogPanel").classList.toggle("is-hidden", !canEditPlanning());
-  $("#planningCatalogGrid").classList.toggle("promotions-only", !canEditPlanning());
-  $("#planningPageTitle").textContent = canEditPlanning() ? "Productos y dinamicas" : "Promociones y dinamicas";
+  $("#productCatalogPanel").classList.add("is-hidden");
+  $("#legacyDynamicsPanel").classList.add("is-hidden");
+  $("#planningCatalogGrid").classList.add("promotions-only");
+  $("#planningPageTitle").textContent = "Dinamicas comerciales";
   $("#planningPageCopy").textContent = canEditPlanning()
-    ? "Catalogo comercial vigente, costos y cambios disponibles para vendedores."
+    ? "Aplica descuentos sobre los productos disponibles en stock, con vigencia y cupo."
     : "Promociones, condiciones y novedades comerciales vigentes.";
   $("#crmForms").classList.toggle("is-hidden", user.role !== "direccion");
 
@@ -1005,22 +1018,25 @@ function renderDiscountScales() {
   select.innerHTML = products.map((product) => `<option value="${product.id}">${escapeHtml(product.name)}</option>`).join("");
   const scales = state.discountScales.filter((scale) => scale.active).filter((scale) => {
     if (canEditPlanning()) return true;
-    return scale.expires >= iso() && (!Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) < Number(scale.stockLimit));
+    return (scale.starts || iso()) <= iso() && scale.expires >= iso() && (!Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) < Number(scale.stockLimit));
   });
   $("#discountScaleList").innerHTML = scales.length ? scales.map((scale) => {
     const product = state.products.find((item) => item.id === scale.productId);
     const used = discountScaleUsage(scale.id);
+    const upcoming = (scale.starts || iso()) > iso();
     const expired = scale.expires < iso();
     const exhausted = Number(scale.stockLimit || 0) > 0 && used >= Number(scale.stockLimit);
-    const status = expired ? "Vencida" : exhausted ? "Cupo agotado" : "Activa";
+    const status = upcoming ? "Programada" : expired ? "Vencida" : exhausted ? "Cupo agotado" : "Activa";
     const remaining = Number(scale.stockLimit || 0) ? `${Math.max(0, Number(scale.stockLimit) - used)} unidades disponibles` : "Sin limite de cupo";
+    const range = scale.discountType === "direct" ? "descuento directo" : `entre ${Number(scale.minQuantity)} y ${Number(scale.maxQuantity)} unidades`;
+    const margin = estimatedMarginForDiscount(product, scale.discountRate);
     return `<article class="list-card">
       <header><strong>${escapeHtml(product?.name || "Producto")}</strong><span class="badge ${expired || exhausted ? "payment" : "alta"}">${status}</span></header>
-      <p><strong>${Number(scale.discountRate).toLocaleString("es-AR")}% de descuento</strong> entre ${Number(scale.minQuantity)} y ${Number(scale.maxQuantity)} unidades.</p>
-      <span class="meta">Vigente hasta ${formatDate(scale.expires)} · ${remaining}</span>
+      <p><strong>${Number(scale.discountRate).toLocaleString("es-AR")}% de descuento</strong> · ${range}.</p>
+      <span class="meta">Del ${formatDate(scale.starts)} al ${formatDate(scale.expires)} · ${remaining} · margen estimado ${margin.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</span>
       ${canEditPlanning() ? `<div class="card-actions"><button class="small-button" type="button" data-remove-discount-scale="${scale.id}">Finalizar</button></div>` : ""}
     </article>`;
-  }).join("") : '<div class="empty-state panel">No hay escalas de descuento vigentes.</div>';
+  }).join("") : '<div class="empty-state panel">No hay dinamicas comerciales vigentes.</div>';
   $$('[data-remove-discount-scale]').forEach((button) => button.addEventListener('click', () => {
     const scale = state.discountScales.find((item) => item.id === button.dataset.removeDiscountScale);
     if (scale) scale.active = false;
@@ -1273,7 +1289,8 @@ function actionButtons(order, mode) {
     `;
   }
   const canCancel = role === "direccion" && !["entregado", "rechazado", "cancelado", "devolucion"].includes(order.status);
-  return `${action}${canCancel ? `<button class="small-button danger-inline" type="button" data-direction-cancel="${order.id}">${["produccion", "logistica"].includes(order.status) ? "Registrar devolucion" : "Cancelar y liberar stock"}</button>` : ""}`;
+  const directionTools = role === "direccion" ? `<button class="small-button" type="button" data-edit-order="${order.id}">Editar</button><button class="small-button danger-inline" type="button" data-delete-order="${order.id}">Borrar</button>` : "";
+  return `${action}${canCancel ? `<button class="small-button danger-inline" type="button" data-direction-cancel="${order.id}">${["produccion", "logistica"].includes(order.status) ? "Registrar devolucion" : "Cancelar y liberar stock"}</button>` : ""}${directionTools}`;
 }
 
 function canSellerCancel(order) {
@@ -1292,6 +1309,8 @@ function attachOrderActions() {
   $$("[data-direction-cancel]").forEach((button) => {
     button.addEventListener("click", () => cancelOrderByDirection(button.dataset.directionCancel));
   });
+  $$("[data-edit-order]").forEach((button) => button.addEventListener("click", () => openEditOrder(button.dataset.editOrder)));
+  $$("[data-delete-order]").forEach((button) => button.addEventListener("click", () => deleteOrder(button.dataset.deleteOrder)));
   $$("[data-deliver]").forEach((button) => {
     button.addEventListener("click", () => {
       const order = state.orders.find((item) => item.id === button.dataset.deliver);
@@ -1376,10 +1395,22 @@ function discountScaleForProduct(product, quantity) {
   if (!product) return null;
   return state.discountScales
     .filter((scale) => scale.active && scale.productId === product.id)
-    .filter((scale) => iso() <= scale.expires)
+    .filter((scale) => (scale.starts || iso()) <= iso() && iso() <= scale.expires)
     .filter((scale) => quantity >= Number(scale.minQuantity || 1) && quantity <= Number(scale.maxQuantity || Infinity))
     .filter((scale) => !Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) + quantity <= Number(scale.stockLimit))
     .sort((a, b) => Number(b.discountRate || 0) - Number(a.discountRate || 0))[0] || null;
+}
+
+function estimatedMarginForDiscount(product, discountRate) {
+  if (!product) return 0;
+  const methods = availablePrintMethods(product);
+  const method = methods.find((item) => item.id === "sublimacion") || methods.find((item) => item.id === "dtf") || methods.find((item) => item.id === "grabado") || methods[0];
+  const directCost = productBaseCost(product) + printMethodCostForProduct(method, product);
+  const commissionRate = totalCommissionRate();
+  const sellerCost = commissionRate < 100 ? directCost / (1 - commissionRate / 100) : directCost;
+  const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
+  const finalPrice = sellerCost * (1 + suggestedMarkup / 100) * (1 - Number(discountRate || 0) / 100);
+  return finalPrice ? ((finalPrice - directCost - finalPrice * commissionRate / 100) / finalPrice) * 100 : -100;
 }
 
 function totalCommissionRate() {
@@ -1993,18 +2024,28 @@ function createDynamic(event) {
 function createDiscountScale(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.currentTarget));
-  const minQuantity = Number(data.minQuantity || 1);
-  const maxQuantity = Number(data.maxQuantity || 0);
-  if (maxQuantity < minQuantity) {
+  const direct = data.discountType === "direct";
+  const minQuantity = direct ? 1 : Number(data.minQuantity || 1);
+  const maxQuantity = direct ? Number.MAX_SAFE_INTEGER : Number(data.maxQuantity || 0);
+  if (!direct && maxQuantity < minQuantity) {
     alert("La cantidad maxima debe ser igual o mayor que la cantidad minima.");
     return;
   }
+  if (data.expires < data.starts) {
+    alert("La fecha de finalizacion debe ser igual o posterior a la fecha de inicio.");
+    return;
+  }
+  const product = state.products.find((item) => item.id === data.productId);
+  const margin = estimatedMarginForDiscount(product, Number(data.discountRate || 0));
+  if (margin < 10) alert(`Atencion: esta dinamica deja un margen estimado de ${margin.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%, por debajo del minimo recomendado de 10%. Se publicara igualmente.`);
   state.discountScales.push({
     id: uid(),
     productId: data.productId,
     minQuantity,
     maxQuantity,
+    discountType: data.discountType,
     discountRate: Number(data.discountRate || 0),
+    starts: data.starts,
     expires: data.expires,
     stockLimit: Number(data.stockLimit || 0),
     active: true,
@@ -2012,7 +2053,9 @@ function createDiscountScale(event) {
   });
   event.currentTarget.reset();
   event.currentTarget.minQuantity.value = 1;
+  event.currentTarget.starts.value = iso();
   event.currentTarget.expires.value = iso(7);
+  event.currentTarget.elements.discountType.dispatchEvent(new Event("change"));
   saveState();
 }
 
@@ -2187,6 +2230,79 @@ function cancelOrderByDirection(orderId) {
     order.status = "cancelado";
     order.comment = "Cancelado por Direccion. Stock reservado liberado.";
   }
+  saveState();
+}
+
+function deleteOrder(orderId) {
+  if (currentUser().role !== "direccion") return;
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) return;
+  if (!window.confirm(`Borrar definitivamente ${order.id} de ${order.client}? Esta accion no se puede deshacer.`)) return;
+  state.orders = state.orders.filter((item) => item !== order);
+  saveState();
+}
+
+function openEditOrder(orderId) {
+  if (currentUser().role !== "direccion") return;
+  const order = state.orders.find((item) => item.id === orderId);
+  if (!order) return;
+  const form = $("#editOrderForm");
+  form.elements.sellerId.innerHTML = state.users.filter((user) => user.role === "vendedor" && user.active).map((user) => `<option value="${user.id}">${escapeHtml(user.name)}</option>`).join("");
+  form.elements.product.innerHTML = state.products.filter((product) => product.active).map((product) => `<option value="${escapeHtml(product.name)}">${escapeHtml(product.name)}</option>`).join("");
+  form.elements.printMethodId.innerHTML = state.printMethods.filter((method) => method.active).map((method) => `<option value="${method.id}">${escapeHtml(method.name)}</option>`).join("");
+  form.elements.status.innerHTML = statusOptions.filter(([value]) => value).map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  const values = {
+    originalId: order.id, id: order.id, sellerId: order.sellerId, requestType: order.requestType, status: order.status,
+    client: order.client, clientPhone: order.clientPhone, clientEmail: order.clientEmail, deliveryAddress: order.deliveryAddress,
+    product: order.product, printMethodId: order.printMethodId, quantity: order.quantity, source: order.source,
+    baseUnitCost: order.baseUnitCost, printUnitCost: order.printUnitCost, sellerUnitCost: order.sellerUnitCost,
+    saleMarkup: order.saleMarkup, saleUnitPrice: order.saleUnitPrice, commissionRate: order.commissionRate,
+    requestedDate: order.requestedDate, committedDate: order.committedDate, payment50: String(Boolean(order.payment50)),
+    inventoryState: order.inventoryState, notes: order.notes, comment: order.comment
+  };
+  Object.entries(values).forEach(([field, value]) => { if (form.elements[field]) form.elements[field].value = value ?? ""; });
+  form.elements.referenceImage.value = "";
+  $("#editOrderDialog").showModal();
+}
+
+async function saveEditedOrder(event) {
+  event.preventDefault();
+  if (currentUser().role !== "direccion") return;
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const order = state.orders.find((item) => item.id === data.originalId);
+  if (!order) return;
+  if (data.id !== data.originalId && state.orders.some((item) => item.id === data.id)) {
+    alert("Ya existe otro pedido con ese numero.");
+    return;
+  }
+  const seller = state.users.find((user) => user.id === data.sellerId);
+  const product = state.products.find((item) => item.name === data.product);
+  const method = state.printMethods.find((item) => item.id === data.printMethodId);
+  const quantity = Number(data.quantity || 0);
+  const unitPrice = Number(data.saleUnitPrice || 0);
+  const commissionRate = Number(data.commissionRate || 0);
+  Object.assign(order, {
+    id: data.id.trim(), sellerId: data.sellerId, seller: seller?.name || order.seller,
+    requestType: data.requestType, status: data.status, client: data.client.trim(), clientPhone: data.clientPhone,
+    clientEmail: data.clientEmail, deliveryAddress: data.deliveryAddress, product: data.product,
+    productCategory: product?.category || inferProductCategory(data.product), productVariant: product?.variant || "",
+    productColor: product?.color || "", stockCode: cleanProductCode(product?.productCode), printMethodId: data.printMethodId,
+    printMethod: method?.name || "Sin impresion", quantity, source: data.source,
+    baseUnitCost: Number(data.baseUnitCost || 0), printUnitCost: Number(data.printUnitCost || 0),
+    sellerUnitCost: Number(data.sellerUnitCost || 0), saleMarkup: Number(data.saleMarkup || 0), saleUnitPrice: unitPrice,
+    saleTotal: unitPrice * quantity, commissionRate, commissionAmount: unitPrice * quantity * commissionRate / 100,
+    requestedDate: data.requestedDate, committedDate: data.committedDate, payment50: data.payment50 === "true",
+    inventoryState: data.inventoryState, notes: data.notes, comment: data.comment
+  });
+  const referenceFile = form.elements.referenceImage.files[0];
+  if (referenceFile) {
+    order.referenceImage = await readImage(referenceFile);
+    order.referenceFileName = referenceFile.name;
+    order.referenceFileType = referenceFile.type;
+  }
+  upsertClient(order.client, order.clientPhone, order.clientEmail);
+  $("#editOrderDialog").close();
   saveState();
 }
 

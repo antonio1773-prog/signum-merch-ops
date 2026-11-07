@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-21" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-22" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -217,7 +217,7 @@
           </div>
 
           <div class="planning-grid" id="planningForms">
-            <form class="panel" id="productForm">
+            <form class="panel is-hidden" id="productForm">
               <h3>Producto disponible</h3>
               <label class="field">
                 <span>Codigo de stock</span>
@@ -278,7 +278,7 @@
               <button class="primary-button full" type="submit">Publicar producto</button>
             </form>
 
-            <form class="panel" id="dynamicForm">
+            <form class="panel is-hidden" id="dynamicForm">
               <h3>Dinamica del dia</h3>
               <label class="field">
                 <span>Titulo</span>
@@ -306,31 +306,33 @@
             </form>
 
             <form class="panel" id="discountScaleForm">
-              <h3>Escala de descuento</h3>
+              <h3>Dinamica comercial</h3>
               <label class="field"><span>Producto</span><select name="productId" id="discountProductSelect" required></select></label>
               <div class="form-grid">
-                <label class="field"><span>Desde unidades</span><input name="minQuantity" type="number" min="1" value="1" required /></label>
-                <label class="field"><span>Hasta unidades</span><input name="maxQuantity" type="number" min="1" required placeholder="100" /></label>
+                <label class="field"><span>Tipo</span><select name="discountType"><option value="direct">Descuento directo</option><option value="scale">Descuento por escala</option></select></label>
                 <label class="field"><span>Descuento %</span><input name="discountRate" type="number" min="0.01" max="100" step="0.01" required placeholder="10" /></label>
-                <label class="field"><span>Vigencia hasta</span><input name="expires" type="date" required /></label>
-                <label class="field"><span>Cupo de unidades</span><input name="stockLimit" type="number" min="1" placeholder="Sin limite" /></label>
+                <label class="field"><span>Desde unidades</span><input name="minQuantity" type="number" min="1" value="1" /></label>
+                <label class="field"><span>Hasta unidades</span><input name="maxQuantity" type="number" min="1" placeholder="Solo para escala" /></label>
+                <label class="field"><span>Fecha de inicio</span><input name="starts" type="date" required /></label>
+                <label class="field"><span>Fecha de finalizacion</span><input name="expires" type="date" required /></label>
+                <label class="field"><span>Cupo maximo de unidades</span><input name="stockLimit" type="number" min="1" placeholder="Opcional: sin limite" /></label>
               </div>
-              <p class="form-help">La escala se desactiva al vencer o cuando los pedidos consumen el cupo indicado.</p>
-              <button class="primary-button full" type="submit">Publicar escala</button>
+              <p class="form-help">Se aplica sobre el precio sugerido. Finaliza por fecha o al agotarse el cupo. Si el margen estimado baja del 10%, recibirás una alerta pero podrás publicarla.</p>
+              <button class="primary-button full" type="submit">Publicar dinamica</button>
             </form>
           </div>
 
           <div class="catalog-grid" id="planningCatalogGrid">
-            <div id="productCatalogPanel">
+            <div class="is-hidden" id="productCatalogPanel">
               <h3>Catalogo activo</h3>
               <div id="productList" class="stack"></div>
             </div>
-            <div>
+            <div class="is-hidden" id="legacyDynamicsPanel">
               <h3>Dinamicas visibles</h3>
               <div id="dynamicList" class="stack"></div>
             </div>
             <div>
-              <h3>Escalas vigentes</h3>
+              <h3>Dinamicas comerciales vigentes</h3>
               <div id="discountScaleList" class="stack"></div>
             </div>
           </div>
@@ -784,9 +786,50 @@
       </form>
     </dialog>
 
+    <dialog id="editOrderDialog">
+      <form class="dialog-card edit-order-form" id="editOrderForm">
+        <header>
+          <h3>Editar pedido</h3>
+          <button class="icon-button" type="button" data-close-edit-order aria-label="Cerrar">x</button>
+        </header>
+        <input type="hidden" name="originalId" />
+        <div class="form-grid">
+          <label class="field"><span>Numero</span><input name="id" required /></label>
+          <label class="field"><span>Vendedor</span><select name="sellerId" required></select></label>
+          <label class="field"><span>Tipo</span><select name="requestType"><option value="pedido">Pedido</option><option value="presupuesto">Presupuesto</option></select></label>
+          <label class="field"><span>Estado</span><select name="status"></select></label>
+          <label class="field"><span>Cliente</span><input name="client" required /></label>
+          <label class="field"><span>Telefono</span><input name="clientPhone" /></label>
+          <label class="field"><span>Mail</span><input name="clientEmail" type="email" /></label>
+          <label class="field"><span>Direccion de entrega</span><input name="deliveryAddress" /></label>
+          <label class="field"><span>Producto</span><select name="product" required></select></label>
+          <label class="field"><span>Impresion</span><select name="printMethodId"></select></label>
+          <label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0" required /></label>
+          <label class="field"><span>Origen</span><select name="source"><option value="taller">Taller</option><option value="fabrica">Fabrica</option></select></label>
+          <label class="field"><span>Costo base unitario</span><input name="baseUnitCost" type="number" min="0" step="0.01" /></label>
+          <label class="field"><span>Costo impresion unitario</span><input name="printUnitCost" type="number" min="0" step="0.01" /></label>
+          <label class="field"><span>Costo a vendedor</span><input name="sellerUnitCost" type="number" min="0" step="0.01" /></label>
+          <label class="field"><span>Markup %</span><input name="saleMarkup" type="number" step="0.01" /></label>
+          <label class="field"><span>Precio venta unitario</span><input name="saleUnitPrice" type="number" min="0" step="0.01" /></label>
+          <label class="field"><span>Comision %</span><input name="commissionRate" type="number" min="0" step="0.01" /></label>
+          <label class="field"><span>Fecha ideal</span><input name="requestedDate" type="date" /></label>
+          <label class="field"><span>Fecha comprometida</span><input name="committedDate" type="date" /></label>
+          <label class="field"><span>Sena 50%</span><select name="payment50"><option value="false">Pendiente</option><option value="true">Confirmada</option></select></label>
+          <label class="field"><span>Estado del stock</span><select name="inventoryState"><option value="">Sin movimiento</option><option value="reserved">Reservado</option><option value="consumed">Consumido</option><option value="released">Liberado</option><option value="external">Externo</option></select></label>
+        </div>
+        <label class="field"><span>Notas</span><textarea name="notes" rows="2"></textarea></label>
+        <label class="field"><span>Comentario interno</span><textarea name="comment" rows="2"></textarea></label>
+        <label class="field"><span>Reemplazar archivo adjunto</span><input name="referenceImage" type="file" accept="image/*,.pdf,.doc,.docx,.ppt,.pptx" /></label>
+        <div class="dialog-actions">
+          <button class="ghost-button" type="button" data-close-edit-order>Cancelar</button>
+          <button class="primary-button" type="submit">Guardar cambios</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-22"></script>
+    <script src="./app.js?v=signum-ops-24"></script>
   </body>
 </html>
