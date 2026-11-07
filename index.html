@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-20" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-21" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -304,6 +304,20 @@
               </div>
               <button class="primary-button full" type="submit">Publicar dinamica</button>
             </form>
+
+            <form class="panel" id="discountScaleForm">
+              <h3>Escala de descuento</h3>
+              <label class="field"><span>Producto</span><select name="productId" id="discountProductSelect" required></select></label>
+              <div class="form-grid">
+                <label class="field"><span>Desde unidades</span><input name="minQuantity" type="number" min="1" value="1" required /></label>
+                <label class="field"><span>Hasta unidades</span><input name="maxQuantity" type="number" min="1" required placeholder="100" /></label>
+                <label class="field"><span>Descuento %</span><input name="discountRate" type="number" min="0.01" max="100" step="0.01" required placeholder="10" /></label>
+                <label class="field"><span>Vigencia hasta</span><input name="expires" type="date" required /></label>
+                <label class="field"><span>Cupo de unidades</span><input name="stockLimit" type="number" min="1" placeholder="Sin limite" /></label>
+              </div>
+              <p class="form-help">La escala se desactiva al vencer o cuando los pedidos consumen el cupo indicado.</p>
+              <button class="primary-button full" type="submit">Publicar escala</button>
+            </form>
           </div>
 
           <div class="catalog-grid" id="planningCatalogGrid">
@@ -314,6 +328,10 @@
             <div>
               <h3>Dinamicas visibles</h3>
               <div id="dynamicList" class="stack"></div>
+            </div>
+            <div>
+              <h3>Escalas vigentes</h3>
+              <div id="discountScaleList" class="stack"></div>
             </div>
           </div>
         </section>
@@ -769,6 +787,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-21"></script>
+    <script src="./app.js?v=signum-ops-22"></script>
   </body>
 </html>

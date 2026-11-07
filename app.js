@@ -35,6 +35,7 @@ const seedState = {
     { id: uid(), title: "Prioridad onboarding Q4", description: "Kits bienvenida con cupo preferencial hasta agotar 300 unidades.", priority: "alta", expires: iso(2), active: true },
     { id: uid(), title: "Bonificacion volumen", description: "10% off en remeras desde 150 unidades. No acumulable.", priority: "media", expires: iso(1), active: true }
   ],
+  discountScales: [],
   printMethods: [
     { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera"], lightOnly: true, active: true },
     { id: "dtf", name: "DTF", unitCost: 650, breakdown: { material: 0, paperFilm: 200, ink: 120, adhesive: 50, printerWear: 80, pressWear: 0, labor: 150, design: 0, electricity: 20, other: 30 }, categories: ["bolsa", "remera", "gorra"], lightOnly: false, active: true },
@@ -301,6 +302,7 @@ function normalizeState(rawState) {
     pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
   }));
   parsed.dynamics ||= structuredClone(seedState.dynamics);
+  parsed.discountScales ||= [];
   parsed.finance ||= structuredClone(seedState.finance);
   parsed.finance.initialCapital = Number(parsed.finance.initialCapital || 0);
   parsed.finance.transactions ||= [];
@@ -351,7 +353,6 @@ function normalizeState(rawState) {
       Object.assign(pricing, defaults);
     }
     pricing.purchaseCost = purchaseCost;
-    pricing.quantityTiers ||= [];
     const baseCost = Number(pricing.manualCost || 0) || purchaseCost;
     pricing.subtotal = baseCost;
     pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
@@ -381,6 +382,8 @@ function normalizeState(rawState) {
     printMethod: "Sin impresion",
     baseUnitCost: 0,
     printUnitCost: 0,
+    discountScaleId: "",
+    discountRate: 0,
     ...order,
     status: order.status === "listo" ? "logistica" : order.status
   }));
@@ -600,6 +603,7 @@ function setup() {
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false, "quantity"));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
+  $("#discountScaleForm").addEventListener("submit", createDiscountScale);
   $("#clientForm").addEventListener("submit", createClient);
   $("#userForm").addEventListener("submit", createUser);
   $("#capitalForm").addEventListener("submit", updateCapital);
@@ -631,6 +635,7 @@ function setup() {
 
   $("#orderForm input[name='requestedDate']").value = iso(7);
   $("#dynamicForm input[name='expires']").value = iso(1);
+  $("#discountScaleForm input[name='expires']").value = iso(7);
   $("#financeForm input[name='date']").value = iso(0);
   $("#purchaseForm input[name='date']").value = iso(0);
   render();
@@ -704,6 +709,7 @@ function render() {
   renderProducts();
   renderCommercialCosts();
   renderDynamics();
+  renderDiscountScales();
   renderClients();
   renderUsers();
   renderOrders();
@@ -990,6 +996,36 @@ function renderDynamics() {
       saveState();
     });
   });
+}
+
+function renderDiscountScales() {
+  const select = $("#discountProductSelect");
+  if (!select) return;
+  const products = state.products.filter((product) => product.active && (product.source === "fabrica" || inventoryFor(product.productCode).available > 0));
+  select.innerHTML = products.map((product) => `<option value="${product.id}">${escapeHtml(product.name)}</option>`).join("");
+  const scales = state.discountScales.filter((scale) => scale.active).filter((scale) => {
+    if (canEditPlanning()) return true;
+    return scale.expires >= iso() && (!Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) < Number(scale.stockLimit));
+  });
+  $("#discountScaleList").innerHTML = scales.length ? scales.map((scale) => {
+    const product = state.products.find((item) => item.id === scale.productId);
+    const used = discountScaleUsage(scale.id);
+    const expired = scale.expires < iso();
+    const exhausted = Number(scale.stockLimit || 0) > 0 && used >= Number(scale.stockLimit);
+    const status = expired ? "Vencida" : exhausted ? "Cupo agotado" : "Activa";
+    const remaining = Number(scale.stockLimit || 0) ? `${Math.max(0, Number(scale.stockLimit) - used)} unidades disponibles` : "Sin limite de cupo";
+    return `<article class="list-card">
+      <header><strong>${escapeHtml(product?.name || "Producto")}</strong><span class="badge ${expired || exhausted ? "payment" : "alta"}">${status}</span></header>
+      <p><strong>${Number(scale.discountRate).toLocaleString("es-AR")}% de descuento</strong> entre ${Number(scale.minQuantity)} y ${Number(scale.maxQuantity)} unidades.</p>
+      <span class="meta">Vigente hasta ${formatDate(scale.expires)} · ${remaining}</span>
+      ${canEditPlanning() ? `<div class="card-actions"><button class="small-button" type="button" data-remove-discount-scale="${scale.id}">Finalizar</button></div>` : ""}
+    </article>`;
+  }).join("") : '<div class="empty-state panel">No hay escalas de descuento vigentes.</div>';
+  $$('[data-remove-discount-scale]').forEach((button) => button.addEventListener('click', () => {
+    const scale = state.discountScales.find((item) => item.id === button.dataset.removeDiscountScale);
+    if (scale) scale.active = false;
+    saveState();
+  }));
 }
 
 function renderClients() {
@@ -1330,19 +1366,20 @@ function productBaseCost(product) {
   return Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
 }
 
-function quantityTiersForProduct(product) {
-  if (!product) return [];
-  const pricing = latestPricingForCode(product.productCode);
-  return (pricing?.quantityTiers || [])
-    .map((tier) => ({ maxQuantity: Math.max(1, Number(tier.maxQuantity || 0)), unitPrice: Number(tier.unitPrice || 0) }))
-    .filter((tier) => tier.unitPrice > 0)
-    .sort((a, b) => a.maxQuantity - b.maxQuantity);
+function discountScaleUsage(scaleId) {
+  return state.orders
+    .filter((order) => order.requestType === "pedido" && order.discountScaleId === scaleId && !["rechazado", "cancelado", "devolucion"].includes(order.status))
+    .reduce((sum, order) => sum + Number(order.quantity || 0), 0);
 }
 
-function quantityTierForProduct(product, quantity) {
-  const tiers = quantityTiersForProduct(product);
-  if (!tiers.length) return null;
-  return tiers.find((tier) => quantity <= tier.maxQuantity) || tiers[tiers.length - 1];
+function discountScaleForProduct(product, quantity) {
+  if (!product) return null;
+  return state.discountScales
+    .filter((scale) => scale.active && scale.productId === product.id)
+    .filter((scale) => iso() <= scale.expires)
+    .filter((scale) => quantity >= Number(scale.minQuantity || 1) && quantity <= Number(scale.maxQuantity || Infinity))
+    .filter((scale) => !Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) + quantity <= Number(scale.stockLimit))
+    .sort((a, b) => Number(b.discountRate || 0) - Number(a.discountRate || 0))[0] || null;
 }
 
 function totalCommissionRate() {
@@ -1366,15 +1403,14 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
   const quantity = Math.max(1, Number(form.quantity.value || 1));
-  const quantityTier = quantityTierForProduct(product, quantity);
+  const discountScale = discountScaleForProduct(product, quantity);
   form.sellerUnitCost.value = sellerCost || "";
-  if (quantityTier && (resetPrice || changedField === "quantity")) {
-    form.saleUnitPrice.value = quantityTier.unitPrice;
-    form.saleMarkup.value = sellerCost ? Math.round(((quantityTier.unitPrice / sellerCost) - 1) * 10000) / 100 : 0;
-  } else if (resetPrice || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
+  if (resetPrice || changedField === "quantity" || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
     const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
-    form.saleMarkup.value = suggestedMarkup;
-    form.saleUnitPrice.value = Math.round(sellerCost * (1 + suggestedMarkup / 100) * 100) / 100 || "";
+    const regularPrice = sellerCost * (1 + suggestedMarkup / 100);
+    const suggestedPrice = discountScale ? regularPrice * (1 - Number(discountScale.discountRate || 0) / 100) : regularPrice;
+    form.saleUnitPrice.value = Math.round(suggestedPrice * 100) / 100 || "";
+    form.saleMarkup.value = sellerCost ? Math.round(((suggestedPrice / sellerCost) - 1) * 10000) / 100 : 0;
   } else if (changedField === "markup") {
     const markup = Number(form.saleMarkup.value || 0);
     form.saleUnitPrice.value = Math.round(sellerCost * (1 + markup / 100) * 100) / 100;
@@ -1390,7 +1426,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
     <div><span>Costo a vendedor</span><strong>${money(sellerCost)}</strong></div>
-    ${quantityTier ? `<div><span>Escala aplicada</span><strong>Hasta ${quantityTier.maxQuantity} u. · ${money(quantityTier.unitPrice)} c/u</strong></div>` : ""}
+    ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
     <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
@@ -1617,7 +1653,7 @@ function renderCommercialCosts() {
   });
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
-    ? directionCanEdit ? "Define producto base, procesos, comisiones y escalas. El vendedor recibe el precio final sugerido." : "Consulta los costos y configura las escalas por cantidad para Ventas."
+    ? directionCanEdit ? "Define producto base, procesos de impresion y comisiones. El vendedor recibe el precio final sugerido." : "Consulta la estructura de pricing definida por Direccion."
     : "Consulta el costo completo y el precio final de cada producto con stock.";
   const codes = purchaseCodes()
     .map((item) => item.code)
@@ -1627,7 +1663,7 @@ function renderCommercialCosts() {
     return;
   }
   container.innerHTML = `<table class="finance-table commercial-cost-table">
-    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Unidades por pasada</th><th>Sublimacion ajustada</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th><th>Escalas de precio de venta</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
+    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Unidades por pasada</th><th>Sublimacion ajustada</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
     <tbody>${codes.map((code) => {
       const purchase = (state.finance.transactions || []).find((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
       const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
@@ -1641,10 +1677,6 @@ function renderCommercialCosts() {
         <td>${directionCanEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing.manualCost || 0)}" data-cost-field="manualCost" placeholder="Usa compra">` : pricing.manualCost ? money(pricing.manualCost) : "Usa compra"}</td>
         <td>${directionCanEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
         <td class="number-cell"><strong data-cost-total>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
-        <td><div class="quantity-tier-editor" data-tier-editor="${escapeHtml(code)}">
-          ${(pricing.quantityTiers?.length ? pricing.quantityTiers : [{ maxQuantity: "", unitPrice: "" }]).map((tier) => `<div class="quantity-tier-row"><label>Hasta <input type="number" min="1" step="1" value="${Number(tier.maxQuantity || 0) || ""}" data-tier-max></label><label>$ <input type="number" min="0" step="0.01" value="${Number(tier.unitPrice || 0) || ""}" data-tier-price></label><button type="button" class="tier-remove" data-remove-tier aria-label="Quitar escala">×</button></div>`).join("")}
-          <div class="tier-actions"><button class="small-button" type="button" data-add-tier>+ Escala</button><button class="small-button" type="button" data-save-tiers>Guardar escalas</button></div>
-        </div></td>
         ${directionCanEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar base</button></td>` : ""}
       </tr>`;
     }).join("")}</tbody></table>`;
@@ -1677,23 +1709,6 @@ function renderCommercialCosts() {
     row.querySelector('[data-cost-total]').textContent = money(subtotal + iva);
   }));
   $$('#commercialCostTable [data-cost-field="iva"]').forEach((input) => input.addEventListener("change", () => input.dispatchEvent(new Event("input"))));
-  $$('[data-remove-tier]').forEach((button) => button.addEventListener('click', () => button.closest('.quantity-tier-row').remove()));
-  $$('[data-add-tier]').forEach((button) => button.addEventListener('click', () => {
-    const row = document.createElement('div');
-    row.className = 'quantity-tier-row';
-    row.innerHTML = '<label>Hasta <input type="number" min="1" step="1" data-tier-max></label><label>$ <input type="number" min="0" step="0.01" data-tier-price></label><button type="button" class="tier-remove" aria-label="Quitar escala">×</button>';
-    row.querySelector('.tier-remove').addEventListener('click', () => row.remove());
-    button.closest('[data-tier-editor]').querySelector('.tier-actions').before(row);
-  }));
-  $$('[data-save-tiers]').forEach((button) => button.addEventListener('click', () => {
-    const editor = button.closest('[data-tier-editor]');
-    const pricing = ensurePricingForCode(editor.dataset.tierEditor);
-    pricing.quantityTiers = [...editor.querySelectorAll('.quantity-tier-row')]
-      .map((row) => ({ maxQuantity: Number(row.querySelector('[data-tier-max]').value || 0), unitPrice: Number(row.querySelector('[data-tier-price]').value || 0) }))
-      .filter((tier) => tier.maxQuantity > 0 && tier.unitPrice > 0)
-      .sort((a, b) => a.maxQuantity - b.maxQuantity);
-    saveState();
-  }));
   $$('#commercialCostTable [data-press-units]').forEach((input) => input.addEventListener("input", () => {
     const row = input.closest("tr");
     const code = row.dataset.costRow;
@@ -1865,6 +1880,7 @@ async function createOrder(event) {
   const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
   const sellerUnitCost = Number(data.sellerUnitCost || 0);
   const saleMarkup = Number(data.saleMarkup || 0);
+  const discountScale = discountScaleForProduct(product, quantity);
   const commissionRate = totalCommissionRate();
   const isFactory = product?.source === "fabrica";
   const isOrder = data.requestType === "pedido" && !isFactory;
@@ -1901,6 +1917,8 @@ async function createOrder(event) {
     saleMarkup,
     saleUnitPrice,
     saleTotal: saleUnitPrice * quantity,
+    discountScaleId: discountScale?.id || "",
+    discountRate: Number(discountScale?.discountRate || 0),
     commissionRate,
     commissionAmount: saleUnitPrice * quantity * commissionRate / 100,
     source: product?.source || "taller",
@@ -1969,6 +1987,32 @@ function createDynamic(event) {
   });
   event.currentTarget.reset();
   event.currentTarget.expires.value = iso(1);
+  saveState();
+}
+
+function createDiscountScale(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.currentTarget));
+  const minQuantity = Number(data.minQuantity || 1);
+  const maxQuantity = Number(data.maxQuantity || 0);
+  if (maxQuantity < minQuantity) {
+    alert("La cantidad maxima debe ser igual o mayor que la cantidad minima.");
+    return;
+  }
+  state.discountScales.push({
+    id: uid(),
+    productId: data.productId,
+    minQuantity,
+    maxQuantity,
+    discountRate: Number(data.discountRate || 0),
+    expires: data.expires,
+    stockLimit: Number(data.stockLimit || 0),
+    active: true,
+    createdAt: Date.now()
+  });
+  event.currentTarget.reset();
+  event.currentTarget.minQuantity.value = 1;
+  event.currentTarget.expires.value = iso(7);
   saveState();
 }
 
