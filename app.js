@@ -1470,7 +1470,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
     ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
-    <div><span>Comision vendedor (${commissionRate}%)</span><strong>${money(commission)}</strong></div>`;
+    <div><span>Comision vendedor real (${commissionRate}%)</span><strong>${money(commission)}</strong></div>`;
 }
 
 function financeTotals() {
