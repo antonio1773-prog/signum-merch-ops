@@ -37,10 +37,10 @@ const seedState = {
   ],
   discountScales: [],
   printMethods: [
-    { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera"], lightOnly: true, active: true },
-    { id: "dtf", name: "DTF", unitCost: 650, breakdown: { material: 0, paperFilm: 200, ink: 120, adhesive: 50, printerWear: 80, pressWear: 0, labor: 150, design: 0, electricity: 20, other: 30 }, categories: ["bolsa", "remera", "gorra"], lightOnly: false, active: true },
-    { id: "grabado", name: "Grabado / marcado", unitCost: 450, breakdown: { material: 40, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 120, pressWear: 0, labor: 220, design: 40, electricity: 20, other: 10 }, categories: ["bolsa", "lapicera"], lightOnly: false, active: true },
-    { id: "sin-impresion", name: "Sin impresion", unitCost: 0, breakdown: { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 }, categories: ["bolsa", "remera", "gorra", "lapicera", "otro"], lightOnly: false, active: true }
+    { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera", "taza", "termo"], lightOnly: true, active: true },
+    { id: "dtf", name: "DTF", unitCost: 650, breakdown: { material: 0, paperFilm: 200, ink: 120, adhesive: 50, printerWear: 80, pressWear: 0, labor: 150, design: 0, electricity: 20, other: 30 }, categories: ["bolsa", "remera", "gorra", "cuaderno", "termo"], lightOnly: false, active: true },
+    { id: "grabado", name: "Grabado / marcado", unitCost: 450, breakdown: { material: 40, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 120, pressWear: 0, labor: 220, design: 40, electricity: 20, other: 10 }, categories: ["bolsa", "lapicera", "cuaderno", "termo"], lightOnly: false, active: true },
+    { id: "sin-impresion", name: "Sin impresion", unitCost: 0, breakdown: { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 }, categories: ["bolsa", "remera", "gorra", "lapicera", "taza", "cuaderno", "termo", "otro"], lightOnly: false, active: true }
   ],
   quoteConfig: {
     costs: {
@@ -276,7 +276,7 @@ function normalizeState(rawState) {
     const defaults = seedState.printMethods.find((item) => item.id === method.id);
     const emptyBreakdown = { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 };
     const breakdown = method.breakdown || { ...emptyBreakdown, material: Number(method.unitCost || 0) };
-    return { ...defaults, ...method, breakdown: { ...emptyBreakdown, ...breakdown } };
+    return { ...defaults, ...method, categories: [...new Set([...(defaults?.categories || []), ...(method.categories || [])])], breakdown: { ...emptyBreakdown, ...breakdown } };
   });
   parsed.quoteConfig ||= structuredClone(seedState.quoteConfig);
   parsed.quoteConfig.costs = { ...structuredClone(seedState.quoteConfig.costs), ...(parsed.quoteConfig.costs || {}) };
@@ -297,7 +297,7 @@ function normalizeState(rawState) {
     productCode: "",
     variant: "",
     ...product,
-    category: product.category || inferProductCategory(product.name),
+    category: !product.category || product.category === "otro" ? inferProductCategory(product.name) : product.category,
     color: product.color || inferProductColor(product.name),
     pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
   }));
@@ -312,11 +312,11 @@ function normalizeState(rawState) {
     productCode: "",
     productDescription: "",
     invoiceImage: "",
-    category: inferProductCategory(item.productDescription),
     variant: "",
     color: "",
     source: "taller",
-    ...item
+    ...item,
+    category: !item.category || item.category === "otro" ? inferProductCategory(item.productDescription) : item.category
   }));
   parsed.finance.pricing ||= [];
   const purchaseGroups = new Map();
@@ -795,6 +795,9 @@ function inferProductCategory(value = "") {
   if (text.includes("remera") || text.includes("camiseta")) return "remera";
   if (text.includes("gorra")) return "gorra";
   if (text.includes("lapic") || text.includes("boligraf")) return "lapicera";
+  if (text.includes("taza") || text.includes("mug")) return "taza";
+  if (text.includes("cuaderno") || text.includes("cuadreno") || text.includes("anotador")) return "cuaderno";
+  if (text.includes("termo") || text.includes("botella term")) return "termo";
   return "otro";
 }
 
@@ -822,7 +825,7 @@ function inferPressUnitsPerPass(value = "") {
   return 1;
 }
 
-const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", otro: "Otros" };
+const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", taza: "Tazas", cuaderno: "Cuadernos", termo: "Termos", otro: "Otros" };
 
 function categoryIcon(category) {
   const paths = {
@@ -830,6 +833,9 @@ function categoryIcon(category) {
     remera: '<path d="m8 4-5 3 2 4 3-1v10h8V10l3 1 2-4-5-3c-1 2-7 2-8 0Z"/>',
     gorra: '<path d="M5 14c0-6 3-9 7-9s7 3 7 9H5Z"/><path d="M12 14c3 0 7 1 9 3-4 1-8 1-11-1"/>',
     lapicera: '<path d="m6 18 2-5L17 4l3 3-9 9-5 2Z"/><path d="m15 6 3 3M8 13l3 3"/>',
+    taza: '<path d="M5 6h11v12H7a2 2 0 0 1-2-2V6Z"/><path d="M16 9h2a3 3 0 0 1 0 6h-2"/>',
+    cuaderno: '<path d="M6 4h13v16H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/><path d="M8 4v16M11 8h5M11 12h5"/>',
+    termo: '<path d="M9 3h6v3l1 2v12H8V8l1-2V3Z"/><path d="M9 6h6M8 11h8"/>',
     otro: '<path d="M4 7h16v13H4V7Z"/><path d="M9 7V4h6v3M4 12h16"/>'
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths[category] || paths.otro}</svg>`;
@@ -917,7 +923,7 @@ function renderProducts() {
     renderProducts();
   }));
   const categoryProducts = selectable.filter((product) => (product.category || inferProductCategory(product.name)) === activeProductCategory);
-  $("#productVariantLabel").textContent = activeProductCategory === "bolsa" ? "Medida y color" : activeProductCategory === "remera" ? "Talle y color" : activeProductCategory === "gorra" ? "Modelo y color" : activeProductCategory === "lapicera" ? "Modelo" : "Variante";
+  $("#productVariantLabel").textContent = activeProductCategory === "bolsa" ? "Medida y color" : activeProductCategory === "remera" ? "Talle y color" : activeProductCategory === "gorra" ? "Modelo y color" : activeProductCategory === "taza" ? "Capacidad y color" : activeProductCategory === "cuaderno" ? "Medida y modelo" : activeProductCategory === "termo" ? "Capacidad y color" : activeProductCategory === "lapicera" ? "Modelo" : "Variante";
   $("#productSelect").innerHTML = categoryProducts
     .map((product) => `<option value="${product.name}" data-source="${product.source}" data-price="${Number(product.price || 0)}">${product.variant || product.name}${product.color ? ` · ${product.color}` : ""}${product.source === "fabrica" ? " · A cotizar fabrica" : ` · ${inventoryFor(product.productCode).available} disponibles`}</option>`)
     .join("");
