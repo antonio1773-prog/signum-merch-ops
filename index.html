@@ -431,7 +431,6 @@
                 <label class="field"><span>Merma %</span><input name="wasteRate" type="number" min="0" max="99" step="0.01" required /></label>
                 <label class="field"><span>Impuestos %</span><input name="taxRate" type="number" min="0" max="99" step="0.01" required /></label>
                 <label class="field"><span>Margen Signum %</span><input name="commissionRate" type="number" min="0" max="99" step="0.01" required /></label>
-                <label class="field"><span>Comision vendedor %</span><input name="secondSellerCommissionRate" type="number" min="0" max="99" step="0.01" required /></label>
                 <label class="field"><span>Margen adicional cotizador %</span><input name="targetMarginRate" type="number" min="0" max="99" step="0.01" required /></label>
                 <label class="field"><span>Multiplo redondeo</span><input name="roundingMultiple" type="number" min="1" step="1" required /></label>
               </div>
@@ -812,7 +811,6 @@
           <label class="field"><span>Costo a vendedor</span><input name="sellerUnitCost" type="number" min="0" step="0.01" /></label>
           <label class="field"><span>Markup %</span><input name="saleMarkup" type="number" step="0.01" /></label>
           <label class="field"><span>Precio venta unitario</span><input name="saleUnitPrice" type="number" min="0" step="0.01" /></label>
-          <label class="field"><span>Comision %</span><input name="commissionRate" type="number" min="0" step="0.01" /></label>
           <label class="field"><span>Fecha ideal</span><input name="requestedDate" type="date" /></label>
           <label class="field"><span>Fecha comprometida</span><input name="committedDate" type="date" /></label>
           <label class="field"><span>Sena 50%</span><select name="payment50"><option value="false">Pendiente</option><option value="true">Confirmada</option></select></label>
@@ -831,6 +829,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-26"></script>
+    <script src="./app.js?v=signum-ops-27"></script>
   </body>
 </html>

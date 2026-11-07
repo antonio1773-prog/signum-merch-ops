@@ -1406,25 +1406,16 @@ function estimatedMarginForDiscount(product, discountRate) {
   const methods = availablePrintMethods(product);
   const method = methods.find((item) => item.id === "sublimacion") || methods.find((item) => item.id === "dtf") || methods.find((item) => item.id === "grabado") || methods[0];
   const directCost = productBaseCost(product) + printMethodCostForProduct(method, product);
-  const commercialRate = totalCommercialRate();
-  const commissionRate = sellerCommissionRate();
-  const sellerCost = commercialRate < 100 ? directCost / (1 - commercialRate / 100) : directCost;
+  const marginRate = signumMarginRate();
+  const sellerCost = marginRate < 100 ? directCost / (1 - marginRate / 100) : directCost;
   const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
   const finalPrice = sellerCost * (1 + suggestedMarkup / 100) * (1 - Number(discountRate || 0) / 100);
-  return finalPrice ? ((finalPrice - directCost - finalPrice * commissionRate / 100) / finalPrice) * 100 : -100;
+  const signumRevenue = Math.min(finalPrice, sellerCost);
+  return signumRevenue ? ((signumRevenue - directCost) / signumRevenue) * 100 : -100;
 }
 
 function signumMarginRate() {
   return Number(state.quoteConfig?.policy?.commissionRate || 0);
-}
-
-function sellerCommissionRate() {
-  return Number(state.quoteConfig?.policy?.secondSellerCommissionRate || 0);
-}
-
-function totalCommercialRate() {
-  const policy = state.quoteConfig?.policy || {};
-  return Number(policy.commissionRate || 0) + Number(policy.secondSellerCommissionRate || 0);
 }
 
 function orderRevenue(order) {
@@ -1438,8 +1429,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const method = state.printMethods.find((item) => item.id === form.printMethod.value);
   const baseCost = productBaseCost(product);
   const printCost = printMethodCostForProduct(method, product);
-  const commercialRate = totalCommercialRate();
-  const commissionRate = sellerCommissionRate();
+  const commercialRate = signumMarginRate();
   const directCost = baseCost + printCost;
   const rawSuggested = commercialRate < 100 ? directCost / (1 - commercialRate / 100) : directCost;
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
@@ -1462,7 +1452,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const markup = Number(form.saleMarkup.value || 0);
   const unitPrice = Number(form.saleUnitPrice.value || sellerCost || 0);
   const total = unitPrice * quantity;
-  const commission = total * commissionRate / 100;
+  const commission = (unitPrice - sellerCost) * quantity;
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
@@ -1470,7 +1460,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
     ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
-    <div><span>Comision vendedor real (${commissionRate}%)</span><strong>${money(commission)}</strong></div>`;
+    <div><span>Comision vendedor (${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%)</span><strong>${money(commission)}</strong></div>`;
 }
 
 function financeTotals() {
@@ -1669,9 +1659,8 @@ function renderCommercialCosts() {
             : `<strong>${money(method.breakdown?.[field] || 0)}</strong>`}</label>`).join("")}</div>
       </details>`).join("")}</div>
     <div class="commission-config">
-      <div><h4>Margen y comision</h4><p>Define el margen de Signum, la comision del vendedor y el markup inicial.</p></div>
+      <div><h4>Margen y sugerencia comercial</h4><p>Define el margen de Signum y el markup inicial del vendedor.</p></div>
       <label class="field"><span>Margen Signum %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.commissionRate || 0)}" id="primaryCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.commissionRate || 0)}%</strong>`}</label>
-      <label class="field"><span>Comision vendedor %</span>${directionCanEdit ? `<input type="number" min="0" max="99" step="0.01" value="${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}" id="secondCommissionRate">` : `<strong>${Number(state.quoteConfig.policy.secondSellerCommissionRate || 0)}%</strong>`}</label>
       <label class="field"><span>Markup sugerido al vendedor %</span>${directionCanEdit ? `<input type="number" min="0" step="0.01" value="${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}" id="suggestedMarkupRate">` : `<strong>${Number(state.quoteConfig.policy.suggestedMarkupRate || 0)}%</strong>`}</label>
     </div>
     ${directionCanEdit ? '<button class="small-button" type="button" id="savePrintMethodCosts">Guardar estructura de pricing</button>' : ""}`;
@@ -1688,7 +1677,6 @@ function renderCommercialCosts() {
       method.unitCost = Object.values(method.breakdown).reduce((sum, value) => sum + Number(value || 0), 0);
     });
     state.quoteConfig.policy.commissionRate = Number($("#primaryCommissionRate")?.value || 0);
-    state.quoteConfig.policy.secondSellerCommissionRate = Number($("#secondCommissionRate")?.value || 0);
     state.quoteConfig.policy.suggestedMarkupRate = Number($("#suggestedMarkupRate")?.value || 0);
     saveState();
   });
@@ -1922,7 +1910,7 @@ async function createOrder(event) {
   const sellerUnitCost = Number(data.sellerUnitCost || 0);
   const saleMarkup = Number(data.saleMarkup || 0);
   const discountScale = discountScaleForProduct(product, quantity);
-  const commissionRate = sellerCommissionRate();
+  const commissionRate = saleMarkup;
   const isFactory = product?.source === "fabrica";
   const isOrder = data.requestType === "pedido" && !isFactory;
   if (!product) {
@@ -1961,7 +1949,7 @@ async function createOrder(event) {
     discountScaleId: discountScale?.id || "",
     discountRate: Number(discountScale?.discountRate || 0),
     commissionRate,
-    commissionAmount: saleUnitPrice * quantity * commissionRate / 100,
+    commissionAmount: (saleUnitPrice - sellerUnitCost) * quantity,
     source: product?.source || "taller",
     stockCode: cleanProductCode(product.productCode),
     inventoryState: isOrder ? "reserved" : "",
@@ -2291,7 +2279,7 @@ async function saveEditedOrder(event) {
   const method = state.printMethods.find((item) => item.id === data.printMethodId);
   const quantity = Number(data.quantity || 0);
   const unitPrice = Number(data.saleUnitPrice || 0);
-  const commissionRate = Number(data.commissionRate || 0);
+  const commissionRate = Number(data.saleMarkup || 0);
   Object.assign(order, {
     id: data.id.trim(), sellerId: data.sellerId, seller: seller?.name || order.seller,
     requestType: data.requestType, status: data.status, client: data.client.trim(), clientPhone: data.clientPhone,
@@ -2301,7 +2289,7 @@ async function saveEditedOrder(event) {
     printMethod: method?.name || "Sin impresion", quantity, source: data.source,
     baseUnitCost: Number(data.baseUnitCost || 0), printUnitCost: Number(data.printUnitCost || 0),
     sellerUnitCost: Number(data.sellerUnitCost || 0), saleMarkup: Number(data.saleMarkup || 0), saleUnitPrice: unitPrice,
-    saleTotal: unitPrice * quantity, commissionRate, commissionAmount: unitPrice * quantity * commissionRate / 100,
+    saleTotal: unitPrice * quantity, commissionRate, commissionAmount: (unitPrice - Number(data.sellerUnitCost || 0)) * quantity,
     requestedDate: data.requestedDate, committedDate: data.committedDate, payment50: data.payment50 === "true",
     inventoryState: data.inventoryState, notes: data.notes, comment: data.comment
   });
@@ -2572,7 +2560,7 @@ function saveQuoteConfig(event) {
   const data = Object.fromEntries(new FormData(event.currentTarget));
   Object.keys(state.quoteConfig.costs).forEach((key) => { state.quoteConfig.costs[key] = Number(data[key] || 0); });
   Object.keys(state.quoteConfig.policy).forEach((key) => { if (event.currentTarget.elements[key]) state.quoteConfig.policy[key] = Number(data[key] || 0); });
-  const totalRate = state.quoteConfig.policy.taxRate + totalCommercialRate() + state.quoteConfig.policy.targetMarginRate;
+  const totalRate = state.quoteConfig.policy.taxRate + signumMarginRate() + state.quoteConfig.policy.targetMarginRate;
   if (totalRate >= 100 || state.quoteConfig.policy.wasteRate >= 100) {
     window.alert("Los porcentajes combinados deben ser menores a 100%.");
     return;
