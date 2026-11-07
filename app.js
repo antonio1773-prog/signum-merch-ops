@@ -351,6 +351,7 @@ function normalizeState(rawState) {
       Object.assign(pricing, defaults);
     }
     pricing.purchaseCost = purchaseCost;
+    pricing.quantityTiers ||= [];
     const baseCost = Number(pricing.manualCost || 0) || purchaseCost;
     pricing.subtotal = baseCost;
     pricing.ivaAmount = pricing.iva ? pricing.subtotal * 0.21 : 0;
@@ -596,7 +597,7 @@ function setup() {
   $("#printMethodSelect").addEventListener("change", () => updateSalePreview(true));
   $("#saleMarkup").addEventListener("input", () => updateSalePreview(false, "markup"));
   $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false, "price"));
-  $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false));
+  $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false, "quantity"));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#clientForm").addEventListener("submit", createClient);
@@ -679,7 +680,8 @@ function render() {
   const user = currentUser();
   if (user.role === "vendedor" && !["new-order", "my-orders", "planning", "quotes", "capacity", "metrics"].includes(activeView)) activeView = "new-order";
   if (user.role !== "vendedor" && ["new-order", "my-orders"].includes(activeView)) activeView = "workflow";
-  if (user.role !== "direccion" && ["crm", "users", "business", "pricing", "stock"].includes(activeView)) activeView = "workflow";
+  if (!["direccion", "planeamiento"].includes(user.role) && activeView === "pricing") activeView = "workflow";
+  if (user.role !== "direccion" && ["crm", "users", "business", "stock"].includes(activeView)) activeView = "workflow";
 
   $("#roleEyebrow").textContent = `${user.name} · ${roleLabels[user.role]}`;
   $("#pageTitle").textContent = activeView === "planning" && !canEditPlanning() ? "Promociones y dinamicas" : viewTitles[activeView];
@@ -747,7 +749,7 @@ function renderNav() {
     user.role === "direccion"
       ? ["workflow", "quotes", "stock", "business", "pricing", "planning", "capacity", "metrics", "crm", "users", "new-order"]
       : user.role === "planeamiento"
-        ? ["workflow", "quotes", "planning", "capacity", "metrics"]
+        ? ["workflow", "quotes", "pricing", "planning", "capacity", "metrics"]
         : ["workflow", "planning", "capacity", "metrics"];
   $("#navTabs").innerHTML = roleTabs
     .map((tab) => `<button type="button" class="${tab === activeView ? "active" : ""}" data-tab="${tab}">${tab === "new-order" ? "Cargar pedido" : tabs[tab]}</button>`)
@@ -1328,6 +1330,21 @@ function productBaseCost(product) {
   return Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
 }
 
+function quantityTiersForProduct(product) {
+  if (!product) return [];
+  const pricing = latestPricingForCode(product.productCode);
+  return (pricing?.quantityTiers || [])
+    .map((tier) => ({ maxQuantity: Math.max(1, Number(tier.maxQuantity || 0)), unitPrice: Number(tier.unitPrice || 0) }))
+    .filter((tier) => tier.unitPrice > 0)
+    .sort((a, b) => a.maxQuantity - b.maxQuantity);
+}
+
+function quantityTierForProduct(product, quantity) {
+  const tiers = quantityTiersForProduct(product);
+  if (!tiers.length) return null;
+  return tiers.find((tier) => quantity <= tier.maxQuantity) || tiers[tiers.length - 1];
+}
+
 function totalCommissionRate() {
   const policy = state.quoteConfig?.policy || {};
   return Number(policy.commissionRate || 0) + Number(policy.secondSellerCommissionRate || 0);
@@ -1348,8 +1365,13 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const directCost = baseCost + printCost;
   const rawSuggested = rate < 100 ? directCost / (1 - rate / 100) : directCost;
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
+  const quantity = Math.max(1, Number(form.quantity.value || 1));
+  const quantityTier = quantityTierForProduct(product, quantity);
   form.sellerUnitCost.value = sellerCost || "";
-  if (resetPrice || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
+  if (quantityTier && (resetPrice || changedField === "quantity")) {
+    form.saleUnitPrice.value = quantityTier.unitPrice;
+    form.saleMarkup.value = sellerCost ? Math.round(((quantityTier.unitPrice / sellerCost) - 1) * 10000) / 100 : 0;
+  } else if (resetPrice || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
     const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
     form.saleMarkup.value = suggestedMarkup;
     form.saleUnitPrice.value = Math.round(sellerCost * (1 + suggestedMarkup / 100) * 100) / 100 || "";
@@ -1362,13 +1384,13 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   }
   const markup = Number(form.saleMarkup.value || 0);
   const unitPrice = Number(form.saleUnitPrice.value || sellerCost || 0);
-  const quantity = Math.max(1, Number(form.quantity.value || 1));
   const total = unitPrice * quantity;
   const commission = total * rate / 100;
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
     <div><span>Costo a vendedor</span><strong>${money(sellerCost)}</strong></div>
+    ${quantityTier ? `<div><span>Escala aplicada</span><strong>Hasta ${quantityTier.maxQuantity} u. · ${money(quantityTier.unitPrice)} c/u</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>
     <div><span>Comision vendedor (${rate}%)</span><strong>${money(commission)}</strong></div>`;
@@ -1595,7 +1617,7 @@ function renderCommercialCosts() {
   });
   const canEdit = canEditPlanning();
   $("#commercialCostHelp").textContent = canEdit
-    ? directionCanEdit ? "Define producto base, procesos de impresion y comisiones. El vendedor recibe el precio final sugerido." : "Consulta la estructura de pricing definida por Direccion."
+    ? directionCanEdit ? "Define producto base, procesos, comisiones y escalas. El vendedor recibe el precio final sugerido." : "Consulta los costos y configura las escalas por cantidad para Ventas."
     : "Consulta el costo completo y el precio final de cada producto con stock.";
   const codes = purchaseCodes()
     .map((item) => item.code)
@@ -1605,7 +1627,7 @@ function renderCommercialCosts() {
     return;
   }
   container.innerHTML = `<table class="finance-table commercial-cost-table">
-    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Unidades por pasada</th><th>Sublimacion ajustada</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
+    <thead><tr><th>Codigo / producto base</th><th>Stock</th><th>Costo compra</th><th>Unidades por pasada</th><th>Sublimacion ajustada</th><th>Costo base manual</th><th>IVA</th><th>Total producto base</th><th>Escalas de precio de venta</th>${directionCanEdit ? "<th></th>" : ""}</tr></thead>
     <tbody>${codes.map((code) => {
       const purchase = (state.finance.transactions || []).find((item) => item.type === "compra" && cleanProductCode(item.productCode) === code);
       const product = state.products.find((item) => cleanProductCode(item.productCode) === code);
@@ -1619,6 +1641,10 @@ function renderCommercialCosts() {
         <td>${directionCanEdit ? `<input class="table-input cost-input" type="number" min="0" step="0.01" value="${Number(pricing.manualCost || 0)}" data-cost-field="manualCost" placeholder="Usa compra">` : pricing.manualCost ? money(pricing.manualCost) : "Usa compra"}</td>
         <td>${directionCanEdit ? `<label class="compact-check"><input type="checkbox" data-cost-field="iva" ${pricing.iva ? "checked" : ""}><span>21%</span></label>` : pricing.iva ? "21%" : "No"}</td>
         <td class="number-cell"><strong data-cost-total>${money(pricing.total || purchaseUnitCost(code))}</strong></td>
+        <td><div class="quantity-tier-editor" data-tier-editor="${escapeHtml(code)}">
+          ${(pricing.quantityTiers?.length ? pricing.quantityTiers : [{ maxQuantity: "", unitPrice: "" }]).map((tier) => `<div class="quantity-tier-row"><label>Hasta <input type="number" min="1" step="1" value="${Number(tier.maxQuantity || 0) || ""}" data-tier-max></label><label>$ <input type="number" min="0" step="0.01" value="${Number(tier.unitPrice || 0) || ""}" data-tier-price></label><button type="button" class="tier-remove" data-remove-tier aria-label="Quitar escala">×</button></div>`).join("")}
+          <div class="tier-actions"><button class="small-button" type="button" data-add-tier>+ Escala</button><button class="small-button" type="button" data-save-tiers>Guardar escalas</button></div>
+        </div></td>
         ${directionCanEdit ? `<td><button class="small-button" type="button" data-save-cost="${escapeHtml(code)}">Guardar base</button></td>` : ""}
       </tr>`;
     }).join("")}</tbody></table>`;
@@ -1651,6 +1677,23 @@ function renderCommercialCosts() {
     row.querySelector('[data-cost-total]').textContent = money(subtotal + iva);
   }));
   $$('#commercialCostTable [data-cost-field="iva"]').forEach((input) => input.addEventListener("change", () => input.dispatchEvent(new Event("input"))));
+  $$('[data-remove-tier]').forEach((button) => button.addEventListener('click', () => button.closest('.quantity-tier-row').remove()));
+  $$('[data-add-tier]').forEach((button) => button.addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'quantity-tier-row';
+    row.innerHTML = '<label>Hasta <input type="number" min="1" step="1" data-tier-max></label><label>$ <input type="number" min="0" step="0.01" data-tier-price></label><button type="button" class="tier-remove" aria-label="Quitar escala">×</button>';
+    row.querySelector('.tier-remove').addEventListener('click', () => row.remove());
+    button.closest('[data-tier-editor]').querySelector('.tier-actions').before(row);
+  }));
+  $$('[data-save-tiers]').forEach((button) => button.addEventListener('click', () => {
+    const editor = button.closest('[data-tier-editor]');
+    const pricing = ensurePricingForCode(editor.dataset.tierEditor);
+    pricing.quantityTiers = [...editor.querySelectorAll('.quantity-tier-row')]
+      .map((row) => ({ maxQuantity: Number(row.querySelector('[data-tier-max]').value || 0), unitPrice: Number(row.querySelector('[data-tier-price]').value || 0) }))
+      .filter((tier) => tier.maxQuantity > 0 && tier.unitPrice > 0)
+      .sort((a, b) => a.maxQuantity - b.maxQuantity);
+    saveState();
+  }));
   $$('#commercialCostTable [data-press-units]').forEach((input) => input.addEventListener("input", () => {
     const row = input.closest("tr");
     const code = row.dataset.costRow;
