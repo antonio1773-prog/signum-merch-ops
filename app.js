@@ -1391,9 +1391,10 @@ function productPrice(productName) {
 
 function productBaseCost(product) {
   if (!product) return 0;
-  if (product.source === "fabrica") return Number(product.price || 0);
-  const pricing = latestPricingForCode(product.productCode);
-  return Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
+  const pricing = product.source === "fabrica" ? null : latestPricingForCode(product.productCode);
+  const rawCost = Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
+  const category = product.category || inferProductCategory(product.name);
+  return category === "taza" ? rawCost / 0.67 : rawCost;
 }
 
 function discountScaleUsage(scaleId) {
