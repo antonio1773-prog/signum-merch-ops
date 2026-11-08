@@ -709,6 +709,7 @@ function render() {
   $("#pageTitle").textContent = activeView === "planning" && !canEditPlanning() ? "Promociones y dinamicas" : viewTitles[activeView];
   $("#sellerBadge").textContent = user.name;
   $("#sellerMenuWrap").classList.toggle("is-hidden", user.role !== "vendedor");
+  $("#internalSellerCostField").classList.toggle("is-hidden", user.role === "vendedor");
   $("#navTabs").classList.toggle("is-hidden", user.role === "vendedor");
   $("#planningForms").classList.toggle("is-hidden", !canEditPlanning());
   $("#commercialCostPanel").classList.toggle("is-hidden", !canEditPlanning());
