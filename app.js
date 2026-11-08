@@ -168,6 +168,7 @@ let state = loadState();
 let activeUserId = sessionStorage.getItem("signum-active-user") || "";
 let activeView = "new-order";
 let activeProductCategory = "";
+let purchaseCostMode = "total";
 
 const roleLabels = {
   vendedor: "Vendedor",
@@ -617,6 +618,10 @@ function setup() {
   $("#capitalForm").addEventListener("submit", updateCapital);
   $("#financeForm").addEventListener("submit", createFinanceTransaction);
   $("#purchaseForm").addEventListener("submit", createPurchase);
+  $("#purchaseForm input[name='unitCost']").addEventListener("input", () => { purchaseCostMode = "unit"; updatePurchaseCostFields(); });
+  $("#purchaseForm input[name='amount']").addEventListener("input", () => { purchaseCostMode = "total"; updatePurchaseCostFields(); });
+  $("#purchaseForm input[name='quantity']").addEventListener("input", updatePurchaseCostFields);
+  $("#cancelPurchaseEdit").addEventListener("click", resetPurchaseForm);
   $("#pricingForm").addEventListener("submit", createPricing);
   $("#pricingForm").addEventListener("input", updatePricingPreview);
   $("#quoteForm").addEventListener("input", updateQuotePreview);
@@ -1546,7 +1551,7 @@ function ensureProductForPurchase(purchase) {
     product.variant = purchase.variant || product.variant || "";
     product.color = purchase.color || product.color || "";
     product.source = purchase.source || product.source || "taller";
-    if (!product.name && purchase.productDescription) product.name = purchase.productDescription;
+    if (purchase.productDescription) product.name = purchase.productDescription;
   }
 }
 
@@ -1635,9 +1640,10 @@ function renderStock() {
     </table>` : `<div class="empty-state">Todavia no hay compras con codigo y cantidad.</div>`;
 
   $("#purchaseTable").innerHTML = purchases.length ? `
-    <table class="finance-table"><thead><tr><th>Fecha</th><th>Codigo</th><th>Descripcion</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th><th>Proveedor</th><th>Factura</th></tr></thead>
-    <tbody>${purchases.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.productCode)}</strong></td><td>${escapeHtml(item.productDescription)}</td><td class="number-cell">${item.quantity}</td><td class="number-cell">${money(Number(item.amount || 0) / Math.max(1, Number(item.quantity || 0)))}</td><td class="number-cell">${money(item.amount)}</td><td>${escapeHtml(item.reference || "-")}</td><td>${item.invoiceImage ? `<a class="invoice-link" href="${item.invoiceImage}" target="_blank" rel="noreferrer">Ver factura</a>` : "-"}</td></tr>`).join("")}</tbody></table>`
+    <table class="finance-table"><thead><tr><th>Fecha</th><th>Codigo</th><th>Descripcion</th><th>Cantidad</th><th>Costo unitario</th><th>Total</th><th>Proveedor</th><th>Factura</th><th></th></tr></thead>
+    <tbody>${purchases.map((item) => `<tr><td>${formatDate(item.date)}</td><td><strong>${escapeHtml(item.productCode)}</strong></td><td>${escapeHtml(item.productDescription)}</td><td class="number-cell">${item.quantity}</td><td class="number-cell">${money(Number(item.amount || 0) / Math.max(1, Number(item.quantity || 0)))}</td><td class="number-cell">${money(item.amount)}</td><td>${escapeHtml(item.reference || "-")}</td><td>${item.invoiceImage ? `<a class="invoice-link" href="${item.invoiceImage}" target="_blank" rel="noreferrer">Ver factura</a>` : "-"}</td><td><button class="small-button" type="button" data-edit-purchase="${item.id}">Editar</button></td></tr>`).join("")}</tbody></table>`
     : `<div class="empty-state">No hay compras cargadas.</div>`;
+  $$('[data-edit-purchase]').forEach((button) => button.addEventListener('click', () => openPurchaseEdit(button.dataset.editPurchase)));
 }
 
 function renderCommercialCosts() {
@@ -2123,34 +2129,90 @@ async function createFinanceTransaction(event) {
   saveState();
 }
 
+function updatePurchaseCostFields() {
+  const form = $("#purchaseForm");
+  const quantity = Number(form.elements.quantity.value || 0);
+  if (quantity <= 0) return;
+  if (purchaseCostMode === "unit") {
+    const unitCost = Number(form.elements.unitCost.value || 0);
+    form.elements.amount.value = unitCost ? Math.round(unitCost * quantity * 100) / 100 : "";
+  } else {
+    const amount = Number(form.elements.amount.value || 0);
+    form.elements.unitCost.value = amount ? Math.round(amount / quantity * 100) / 100 : "";
+  }
+}
+
+function resetPurchaseForm() {
+  const form = $("#purchaseForm");
+  form.reset();
+  form.elements.purchaseId.value = "";
+  form.elements.date.value = iso();
+  $("#purchaseFormTitle").textContent = "Nueva compra";
+  $("#purchaseSubmitButton").textContent = "Ingresar compra y stock";
+  $("#cancelPurchaseEdit").classList.add("is-hidden");
+  purchaseCostMode = "total";
+}
+
+function openPurchaseEdit(purchaseId) {
+  const purchase = state.finance.transactions.find((item) => item.id === purchaseId && item.type === "compra");
+  if (!purchase) return;
+  const form = $("#purchaseForm");
+  const values = {
+    purchaseId: purchase.id,
+    productCode: purchase.productCode,
+    quantity: purchase.quantity,
+    productDescription: purchase.productDescription,
+    unitCost: Number(purchase.amount || 0) / Math.max(1, Number(purchase.quantity || 0)),
+    amount: purchase.amount,
+    date: purchase.date,
+    reference: purchase.reference,
+    description: purchase.description
+  };
+  Object.entries(values).forEach(([field, value]) => { if (form.elements[field]) form.elements[field].value = value ?? ""; });
+  form.elements.invoiceImage.value = "";
+  $("#purchaseFormTitle").textContent = "Editar compra";
+  $("#purchaseSubmitButton").textContent = "Guardar correccion";
+  $("#cancelPurchaseEdit").classList.remove("is-hidden");
+  purchaseCostMode = "unit";
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 async function createPurchase(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
-  const invoiceImage = await readImage(form.invoiceImage.files[0]);
-  const purchase = {
-    id: uid(),
+  const quantity = Number(data.quantity || 0);
+  const amount = Number(data.amount || 0) || Number(data.unitCost || 0) * quantity;
+  if (quantity <= 0 || amount <= 0) {
+    alert("Completa la cantidad y el costo unitario o el costo total.");
+    return;
+  }
+  const existing = state.finance.transactions.find((item) => item.id === data.purchaseId && item.type === "compra");
+  const previousCode = cleanProductCode(existing?.productCode);
+  const invoiceFile = form.invoiceImage.files[0];
+  const invoiceImage = invoiceFile ? await readImage(invoiceFile) : existing?.invoiceImage || "";
+  const purchase = existing || { id: uid(), createdAt: Date.now() };
+  Object.assign(purchase, {
     type: "compra",
-    amount: Number(data.amount || 0),
-    quantity: Number(data.quantity || 0),
+    amount,
+    quantity,
     productCode: cleanProductCode(data.productCode),
     productDescription: data.productDescription,
-    category: data.category,
-    variant: data.variant,
-    color: data.color,
-    source: data.source,
+    category: data.category || existing?.category,
+    variant: data.variant || existing?.variant,
+    color: data.color || existing?.color,
+    source: data.source || existing?.source || "taller",
     date: data.date,
     reference: data.reference,
     description: data.description,
-    invoiceImage,
-    createdAt: Date.now()
-  };
-  state.finance.transactions.push(purchase);
+    invoiceImage
+  });
+  if (!existing) state.finance.transactions.push(purchase);
   ensureProductForPurchase(purchase);
   ensurePricingForCode(data.productCode, data.productDescription);
+  if (previousCode && previousCode !== purchase.productCode) recalculatePricingForCode(previousCode);
   recalculatePricingForCode(data.productCode);
-  form.reset();
-  form.date.value = iso(0);
+  resetPurchaseForm();
   saveState();
 }
 

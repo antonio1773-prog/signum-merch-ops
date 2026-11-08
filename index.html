@@ -473,7 +473,8 @@
 
           <div class="business-layout">
             <form class="panel" id="purchaseForm">
-              <h3>Nueva compra</h3>
+              <h3 id="purchaseFormTitle">Nueva compra</h3>
+              <input type="hidden" name="purchaseId" />
               <div class="form-grid">
                 <label class="field">
                   <span>Codigo</span>
@@ -490,8 +491,12 @@
               </label>
               <div class="form-grid">
                 <label class="field">
+                  <span>Costo unitario</span>
+                  <input name="unitCost" type="number" min="0" step="0.01" placeholder="4200" />
+                </label>
+                <label class="field">
                   <span>Costo total</span>
-                  <input name="amount" type="number" min="0" step="0.01" required placeholder="420000" />
+                  <input name="amount" type="number" min="0" step="0.01" placeholder="420000" />
                 </label>
                 <label class="field">
                   <span>Fecha</span>
@@ -510,7 +515,10 @@
                 <span>Factura</span>
                 <input name="invoiceImage" type="file" accept="image/*,.pdf" />
               </label>
-              <button class="primary-button full" type="submit">Ingresar compra y stock</button>
+              <div class="dialog-actions">
+                <button class="ghost-button is-hidden" id="cancelPurchaseEdit" type="button">Cancelar edicion</button>
+                <button class="primary-button" id="purchaseSubmitButton" type="submit">Ingresar compra y stock</button>
+              </div>
             </form>
 
             <div class="panel">
@@ -832,6 +840,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-28"></script>
+    <script src="./app.js?v=signum-ops-29"></script>
   </body>
 </html>
