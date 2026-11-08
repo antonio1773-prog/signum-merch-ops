@@ -916,12 +916,15 @@ function visibleOrders(scope = "list") {
 function renderProducts() {
   const activeProducts = state.products.filter((product) => product.active);
   const selectable = orderProducts();
-  const categories = [...new Set(selectable.map((product) => product.category || inferProductCategory(product.name)))];
-  if (!categories.includes(activeProductCategory)) activeProductCategory = categories.includes("bolsa") ? "bolsa" : categories[0] || "";
+  const availableCategories = [...new Set(selectable.map((product) => product.category || inferProductCategory(product.name)))];
+  const requestedCategories = ["bolsa", "taza", "cuaderno", "lapicera", "termo"];
+  const categories = [...new Set([...requestedCategories, ...availableCategories])];
+  if (!availableCategories.includes(activeProductCategory)) activeProductCategory = availableCategories.includes("bolsa") ? "bolsa" : availableCategories[0] || "";
   $("#productCategoryGrid").innerHTML = categories.map((category) => `
-    <button class="product-category-card ${category === activeProductCategory ? "active" : ""}" type="button" data-product-category="${category}">
+    <button class="product-category-card ${category === activeProductCategory ? "active" : ""}" type="button" data-product-category="${category}" ${availableCategories.includes(category) ? "" : "disabled"}>
       <span class="category-icon">${categoryIcon(category)}</span>
       <strong>${categoryLabels[category] || "Otros"}</strong>
+      ${availableCategories.includes(category) ? "" : '<small>Sin stock</small>'}
     </button>`).join("");
   $$('[data-product-category]').forEach((button) => button.addEventListener("click", () => {
     activeProductCategory = button.dataset.productCategory;
@@ -1468,7 +1471,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
-    <div><span>Costo a vendedor</span><strong>${money(sellerCost)}</strong></div>
+    <div><span>Precio final por unidad</span><strong>${money(unitPrice)}</strong></div>
     ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>
     <div><span>Total de venta</span><strong>${money(total)}</strong></div>

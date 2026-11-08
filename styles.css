@@ -588,6 +588,19 @@ h3 {
   text-align: center;
 }
 
+.product-category-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.product-category-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
 .product-category-card.active {
   border-color: var(--purple-2);
   box-shadow: 0 0 0 2px rgba(122, 92, 250, 0.18);
