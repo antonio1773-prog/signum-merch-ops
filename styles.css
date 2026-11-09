@@ -1085,6 +1085,14 @@ h3 {
   gap: 16px;
 }
 
+.mockup-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  text-decoration: none;
+}
+
 .form-head.single {
   justify-content: flex-end;
 }
