@@ -382,6 +382,11 @@ function normalizeState(rawState) {
     productColor: "",
     printMethodId: "sin-impresion",
     printMethod: "Sin impresion",
+    quoteMeasures: "",
+    quoteBaseColors: "",
+    quoteHandleColor: "",
+    quoteHandleSize: "",
+    quoteShape: "",
     baseUnitCost: 0,
     printUnitCost: 0,
     discountScaleId: "",
@@ -603,6 +608,7 @@ function setup() {
   $("#saleMarkup").addEventListener("input", () => updateSalePreview(false, "markup"));
   $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false, "price"));
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false, "quantity"));
+  $$("#orderForm input[name='requestType']").forEach((input) => input.addEventListener("change", updateLargeSalePanel));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#discountScaleForm").addEventListener("submit", createDiscountScale);
@@ -994,7 +1000,19 @@ function updateProductConfiguration(resetPrice = true) {
     orderRadio.checked = true;
   }
   $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}</p>` : "";
+  updateLargeSalePanel();
   updateSalePreview(resetPrice);
+}
+
+function updateLargeSalePanel() {
+  const form = $("#orderForm");
+  const product = state.products.find((item) => item.name === form.product.value);
+  const isQuote = form.querySelector('[name="requestType"][value="presupuesto"]')?.checked || product?.source === "fabrica";
+  $("#largeSalePanel").classList.toggle("is-hidden", !isQuote);
+  if (isQuote && product) {
+    if (!form.elements.quoteMeasures.value) form.elements.quoteMeasures.value = product.variant || "";
+    if (!form.elements.quoteBaseColors.value) form.elements.quoteBaseColors.value = product.color || "";
+  }
 }
 
 function renderDynamics() {
@@ -1204,6 +1222,7 @@ function orderMatrixTemplate(orders) {
 function matrixRowTemplate(order) {
   const contact = [order.clientPhone, order.clientEmail].filter(Boolean).join(" / ") || "Sin contacto";
   const actions = actionButtons(order, "workflow");
+  const quoteDetails = orderQuoteDetails(order);
   return `
     <tr>
       <td><strong>${order.id}</strong></td>
@@ -1213,7 +1232,7 @@ function matrixRowTemplate(order) {
       <td>${order.client}</td>
       <td>${contact}</td>
       <td>${order.deliveryAddress || "Sin direccion"}</td>
-      <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span></td>
+      <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span>${quoteDetails ? `<br><span class="meta"><strong>Presupuesto:</strong> ${quoteDetails}</span>` : ""}</td>
       <td class="number-cell">${order.quantity}</td>
       <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
       <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
@@ -1256,6 +1275,7 @@ function orderTemplate(order, mode) {
       <p class="meta"><strong>Contacto:</strong> ${contact}</p>
       <p class="meta"><strong>Direccion entrega:</strong> ${order.deliveryAddress || "Sin direccion cargada"}</p>
       <p class="meta"><strong>Configuracion:</strong> ${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ") || "Sin detalle"}</p>
+      ${orderQuoteDetails(order) ? `<p class="meta"><strong>Detalle presupuesto grande:</strong> ${orderQuoteDetails(order)}</p>` : ""}
       ${attachmentTemplate(order)}
       ${order.notes ? `<p class="meta">${order.notes}</p>` : ""}
       ${order.comment ? `<p class="meta"><strong>Comentario:</strong> ${order.comment}</p>` : ""}
@@ -1263,6 +1283,16 @@ function orderTemplate(order, mode) {
       ${actions ? `<div class="card-actions">${actions}</div>` : ""}
     </article>
   `;
+}
+
+function orderQuoteDetails(order) {
+  return [
+    order.quoteMeasures ? `Medidas: ${escapeHtml(order.quoteMeasures)}` : "",
+    order.quoteBaseColors ? `Bases: ${escapeHtml(order.quoteBaseColors)}` : "",
+    order.quoteHandleColor ? `Manija: ${escapeHtml(order.quoteHandleColor)}` : "",
+    order.quoteHandleSize ? `Tamaño manija: ${escapeHtml(order.quoteHandleSize)}` : "",
+    order.quoteShape ? `Forma: ${escapeHtml(order.quoteShape)}` : ""
+  ].filter(Boolean).join(" · ");
 }
 
 function badgeClass(status) {
@@ -1417,6 +1447,26 @@ function discountScaleForProduct(product, quantity) {
     .sort((a, b) => Number(b.discountRate || 0) - Number(a.discountRate || 0))[0] || null;
 }
 
+function renderProductScaleInfo(product, quantity, appliedScale) {
+  const container = $("#productScaleInfo");
+  if (!container || !product) {
+    if (container) container.innerHTML = "";
+    return;
+  }
+  const currentScales = state.discountScales
+    .filter((scale) => scale.active && scale.productId === product.id)
+    .filter((scale) => (scale.starts || iso()) <= iso() && iso() <= scale.expires)
+    .filter((scale) => !Number(scale.stockLimit || 0) || discountScaleUsage(scale.id) < Number(scale.stockLimit));
+  container.innerHTML = currentScales.length ? `
+    <div class="scale-info-head"><strong>Escalas y dinamicas vigentes</strong><span>${appliedScale ? "Aplicada a esta cantidad" : "Modifica la cantidad para aplicar una escala"}</span></div>
+    <div class="scale-info-grid">${currentScales.map((scale) => {
+      const used = discountScaleUsage(scale.id);
+      const remaining = Number(scale.stockLimit || 0) ? Math.max(0, Number(scale.stockLimit) - used) : null;
+      const range = scale.discountType === "direct" ? "Todas las cantidades" : `${Number(scale.minQuantity)} a ${Number(scale.maxQuantity)} unidades`;
+      return `<div class="scale-info-item ${scale.id === appliedScale?.id ? "active" : ""}"><strong>${Number(scale.discountRate).toLocaleString("es-AR")}% OFF</strong><span>${range}</span><small>Hasta ${formatDate(scale.expires)}${remaining === null ? "" : ` · cupo ${remaining} u.`}</small></div>`;
+    }).join("")}</div>` : '<div class="scale-info-empty">Este producto no tiene escalas comerciales vigentes.</div>';
+}
+
 function estimatedMarginForDiscount(product, discountRate) {
   if (!product) return 0;
   const methods = availablePrintMethods(product);
@@ -1451,6 +1501,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const sellerCost = Math.ceil(rawSuggested / 50) * 50;
   const quantity = Math.max(1, Number(form.quantity.value || 1));
   const discountScale = discountScaleForProduct(product, quantity);
+  renderProductScaleInfo(product, quantity, discountScale);
   form.sellerUnitCost.value = sellerCost || "";
   if (resetPrice || changedField === "quantity" || (!form.saleUnitPrice.value && !form.saleMarkup.value)) {
     const suggestedMarkup = Number(state.quoteConfig?.policy?.suggestedMarkupRate || 0);
@@ -1956,6 +2007,11 @@ async function createOrder(event) {
     productColor: product.color || "",
     printMethodId: printMethod?.id || "sin-impresion",
     printMethod: printMethod?.name || "Sin impresion",
+    quoteMeasures: isOrder ? "" : data.quoteMeasures || "",
+    quoteBaseColors: isOrder ? "" : data.quoteBaseColors || "",
+    quoteHandleColor: isOrder ? "" : data.quoteHandleColor || "",
+    quoteHandleSize: isOrder ? "" : data.quoteHandleSize || "",
+    quoteShape: isOrder ? "" : data.quoteShape || "",
     baseUnitCost: productBaseCost(product),
     printUnitCost: printMethodCostForProduct(printMethod, product),
     quantity,
@@ -1985,6 +2041,7 @@ async function createOrder(event) {
   form.reset();
   form.requestType.value = "pedido";
   form.requestedDate.value = iso(7);
+  updateLargeSalePanel();
   updateSalePreview(true);
   activeView = currentUser().role === "vendedor" ? "my-orders" : "workflow";
   saveState();
@@ -2329,7 +2386,9 @@ function openEditOrder(orderId) {
     baseUnitCost: order.baseUnitCost, printUnitCost: order.printUnitCost, sellerUnitCost: order.sellerUnitCost,
     saleMarkup: order.saleMarkup, saleUnitPrice: order.saleUnitPrice, commissionRate: order.commissionRate,
     requestedDate: order.requestedDate, committedDate: order.committedDate, payment50: String(Boolean(order.payment50)),
-    inventoryState: order.inventoryState, notes: order.notes, comment: order.comment
+    inventoryState: order.inventoryState, quoteMeasures: order.quoteMeasures, quoteBaseColors: order.quoteBaseColors,
+    quoteHandleColor: order.quoteHandleColor, quoteHandleSize: order.quoteHandleSize, quoteShape: order.quoteShape,
+    notes: order.notes, comment: order.comment
   };
   Object.entries(values).forEach(([field, value]) => { if (form.elements[field]) form.elements[field].value = value ?? ""; });
   form.elements.referenceImage.value = "";
@@ -2364,7 +2423,9 @@ async function saveEditedOrder(event) {
     sellerUnitCost: Number(data.sellerUnitCost || 0), saleMarkup: Number(data.saleMarkup || 0), saleUnitPrice: unitPrice,
     saleTotal: unitPrice * quantity, commissionRate, commissionAmount: (unitPrice - Number(data.sellerUnitCost || 0)) * quantity,
     requestedDate: data.requestedDate, committedDate: data.committedDate, payment50: data.payment50 === "true",
-    inventoryState: data.inventoryState, notes: data.notes, comment: data.comment
+    inventoryState: data.inventoryState, quoteMeasures: data.quoteMeasures, quoteBaseColors: data.quoteBaseColors,
+    quoteHandleColor: data.quoteHandleColor, quoteHandleSize: data.quoteHandleSize, quoteShape: data.quoteShape,
+    notes: data.notes, comment: data.comment
   });
   const referenceFile = form.elements.referenceImage.files[0];
   if (referenceFile) {

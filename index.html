@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-23" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-24" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -130,7 +130,25 @@
 
             <div class="print-recommendation" id="printRecommendation"></div>
 
+            <div class="product-scale-info" id="productScaleInfo"></div>
+
             <div class="sale-preview" id="salePreview"></div>
+
+            <section class="panel large-sale-panel is-hidden" id="largeSalePanel">
+              <div class="section-header compact">
+                <div>
+                  <h3>Detalle para presupuesto grande</h3>
+                  <p>Detalla todas las variantes que necesita el cliente para que Planeamiento pueda cotizar.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <label class="field"><span>Medidas</span><textarea name="quoteMeasures" rows="2" placeholder="30x30x10, 40x45x10..."></textarea></label>
+                <label class="field"><span>Colores de base</span><textarea name="quoteBaseColors" rows="2" placeholder="Blanco, beige, negro..."></textarea></label>
+                <label class="field"><span>Color de manija</span><input name="quoteHandleColor" placeholder="Negro, al tono, combinado..." /></label>
+                <label class="field"><span>Tamaño de manija</span><input name="quoteHandleSize" placeholder="Corta, larga, 50 cm..." /></label>
+                <label class="field"><span>Forma / modelo</span><input name="quoteShape" placeholder="Recta, fuelle, tipo camiseta..." /></label>
+              </div>
+            </section>
 
             <label class="field">
               <span>Detalle</span>
@@ -826,6 +844,11 @@
           <label class="field"><span>Fecha comprometida</span><input name="committedDate" type="date" /></label>
           <label class="field"><span>Sena 50%</span><select name="payment50"><option value="false">Pendiente</option><option value="true">Confirmada</option></select></label>
           <label class="field"><span>Estado del stock</span><select name="inventoryState"><option value="">Sin movimiento</option><option value="reserved">Reservado</option><option value="consumed">Consumido</option><option value="released">Liberado</option><option value="external">Externo</option></select></label>
+          <label class="field"><span>Medidas presupuesto</span><input name="quoteMeasures" /></label>
+          <label class="field"><span>Colores base presupuesto</span><input name="quoteBaseColors" /></label>
+          <label class="field"><span>Color de manija</span><input name="quoteHandleColor" /></label>
+          <label class="field"><span>Tamaño de manija</span><input name="quoteHandleSize" /></label>
+          <label class="field"><span>Forma / modelo</span><input name="quoteShape" /></label>
         </div>
         <label class="field"><span>Notas</span><textarea name="notes" rows="2"></textarea></label>
         <label class="field"><span>Comentario interno</span><textarea name="comment" rows="2"></textarea></label>
@@ -840,6 +863,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-32"></script>
+    <script src="./app.js?v=signum-ops-33"></script>
   </body>
 </html>
