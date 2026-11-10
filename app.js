@@ -1209,7 +1209,7 @@ function orderMatrixTemplate(orders) {
             <th>Direccion entrega</th>
             <th>Producto</th>
             <th>Cant.</th>
-            ${directionCosts ? `<th>Costo producto/u.</th><th>Materiales impresion/u.</th><th>Mano de obra/u.</th><th>Costo directo total</th><th>Precio vendedor/u.</th><th>Total vendedor</th><th>Margen Signum</th><th>Markup vendedor</th><th>Precio final/u.</th><th>Venta total</th><th>Comision vendedor</th>` : `<th>Precio venta</th><th>Total</th><th>Comision</th>`}
+            ${directionCosts ? `<th>Costo producto total</th><th>Materiales impresion total</th><th>Mano de obra total</th><th>Costo directo total</th><th>Precio vendedor total</th><th>Margen Signum</th><th>Markup vendedor</th><th>Precio final total</th><th>Venta total</th><th>Comision vendedor</th>` : `<th>Precio venta</th><th>Total</th><th>Comision</th>`}
             <th>Origen</th>
             <th>Sena</th>
             <th>Fecha ideal</th>
@@ -1254,15 +1254,14 @@ function matrixRowTemplate(order) {
       <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span>${quoteDetails ? `<br><span class="meta"><strong>Presupuesto:</strong> ${quoteDetails}</span>` : ""}</td>
       <td class="number-cell">${order.quantity}</td>
       ${directionCosts ? `
-        <td class="number-cell">${money(order.baseUnitCost || 0)}</td>
-        <td class="number-cell">${money(materialUnitCost)}</td>
-        <td class="number-cell">${money(laborUnitCost)}</td>
+        <td class="number-cell">${money(baseTotal)}</td>
+        <td class="number-cell">${money(materialUnitCost * quantity)}</td>
+        <td class="number-cell">${money(laborUnitCost * quantity)}</td>
         <td class="number-cell">${money(baseTotal + printTotal)}</td>
-        <td class="number-cell">${money(order.sellerUnitCost || 0)}</td>
         <td class="number-cell">${money(sellerTotal)}</td>
         <td class="number-cell">${money(signumMargin)}</td>
         <td class="number-cell">${Number(order.saleMarkup || 0).toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</td>
-        <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
+        <td class="number-cell">${money(order.saleTotal || orderRevenue(order))}</td>
         <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
         <td class="number-cell">${money(orderCommissionAmount(order))}</td>` : `
         <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
