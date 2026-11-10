@@ -389,6 +389,8 @@ function normalizeState(rawState) {
     quoteShape: "",
     baseUnitCost: 0,
     printUnitCost: 0,
+    printMaterialUnitCost: 0,
+    printLaborUnitCost: 0,
     discountScaleId: "",
     discountRate: 0,
     ...order,
@@ -871,10 +873,17 @@ function availablePrintMethods(product) {
 }
 
 function printMethodCostForProduct(method, product) {
-  if (!method) return 0;
-  if (method.id === "sin-impresion" || (product?.category || inferProductCategory(product?.name)) !== "bolsa") return Number(method.unitCost || 0);
-  const unitsPerPass = Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`)));
-  return Number(method.unitCost || 0) / unitsPerPass;
+  const parts = printMethodCostParts(method, product);
+  return parts.materials + parts.labor;
+}
+
+function printMethodCostParts(method, product) {
+  if (!method) return { materials: 0, labor: 0 };
+  const isBagProcess = method.id !== "sin-impresion" && (product?.category || inferProductCategory(product?.name)) === "bolsa";
+  const divisor = isBagProcess ? Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`))) : 1;
+  const total = Number(method.unitCost || 0) / divisor;
+  const labor = Number(method.breakdown?.labor || 0) / divisor;
+  return { labor, materials: Math.max(0, total - labor) };
 }
 
 function commercialCostDefaults(sourceState = state) {
@@ -1200,7 +1209,7 @@ function orderMatrixTemplate(orders) {
             <th>Direccion entrega</th>
             <th>Producto</th>
             <th>Cant.</th>
-            ${directionCosts ? `<th>Costo producto/u.</th><th>Costo impresion/u.</th><th>Costo directo total</th><th>Precio vendedor/u.</th><th>Total vendedor</th><th>Margen Signum</th><th>Markup vendedor</th><th>Precio final/u.</th><th>Venta total</th><th>Comision vendedor</th>` : `<th>Precio venta</th><th>Total</th><th>Comision</th>`}
+            ${directionCosts ? `<th>Costo producto/u.</th><th>Materiales impresion/u.</th><th>Mano de obra/u.</th><th>Costo directo total</th><th>Precio vendedor/u.</th><th>Total vendedor</th><th>Margen Signum</th><th>Markup vendedor</th><th>Precio final/u.</th><th>Venta total</th><th>Comision vendedor</th>` : `<th>Precio venta</th><th>Total</th><th>Comision</th>`}
             <th>Origen</th>
             <th>Sena</th>
             <th>Fecha ideal</th>
@@ -1225,7 +1234,12 @@ function matrixRowTemplate(order) {
   const directionCosts = currentUser().role === "direccion";
   const quantity = Number(order.quantity || 0);
   const baseTotal = Number(order.baseUnitCost || 0) * quantity;
-  const printTotal = Number(order.printUnitCost || 0) * quantity;
+  const orderProduct = state.products.find((product) => product.name === order.product);
+  const orderMethod = state.printMethods.find((method) => method.id === order.printMethodId);
+  const fallbackParts = printMethodCostParts(orderMethod, orderProduct);
+  const materialUnitCost = Number(order.printMaterialUnitCost || 0) || Math.max(0, Number(order.printUnitCost || 0) - (Number(order.printLaborUnitCost || 0) || fallbackParts.labor));
+  const laborUnitCost = Number(order.printLaborUnitCost || 0) || fallbackParts.labor;
+  const printTotal = (materialUnitCost + laborUnitCost) * quantity;
   const sellerTotal = Number(order.sellerUnitCost || 0) * quantity;
   const signumMargin = sellerTotal - baseTotal - printTotal;
   return `
@@ -1241,7 +1255,8 @@ function matrixRowTemplate(order) {
       <td class="number-cell">${order.quantity}</td>
       ${directionCosts ? `
         <td class="number-cell">${money(order.baseUnitCost || 0)}</td>
-        <td class="number-cell">${money(order.printUnitCost || 0)}</td>
+        <td class="number-cell">${money(materialUnitCost)}</td>
+        <td class="number-cell">${money(laborUnitCost)}</td>
         <td class="number-cell">${money(baseTotal + printTotal)}</td>
         <td class="number-cell">${money(order.sellerUnitCost || 0)}</td>
         <td class="number-cell">${money(sellerTotal)}</td>
@@ -2012,6 +2027,7 @@ async function createOrder(event) {
   const data = Object.fromEntries(new FormData(form));
   const product = state.products.find((item) => item.name === data.product);
   const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
+  const printParts = printMethodCostParts(printMethod, product);
   const quantity = Number(data.quantity || 0);
   const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
   const sellerUnitCost = Number(data.sellerUnitCost || 0);
@@ -2053,6 +2069,8 @@ async function createOrder(event) {
     quoteShape: isOrder ? "" : data.quoteShape || "",
     baseUnitCost: productBaseCost(product),
     printUnitCost: printMethodCostForProduct(printMethod, product),
+    printMaterialUnitCost: printParts.materials,
+    printLaborUnitCost: printParts.labor,
     quantity,
     sellerUnitCost,
     saleMarkup,
@@ -2418,11 +2436,17 @@ function openEditOrder(orderId) {
   form.elements.product.innerHTML = state.products.filter((product) => product.active).map((product) => `<option value="${escapeHtml(product.name)}">${escapeHtml(product.name)}</option>`).join("");
   form.elements.printMethodId.innerHTML = state.printMethods.filter((method) => method.active).map((method) => `<option value="${method.id}">${escapeHtml(method.name)}</option>`).join("");
   form.elements.status.innerHTML = statusOptions.filter(([value]) => value).map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
+  const selectedProduct = state.products.find((product) => product.name === order.product);
+  const selectedMethod = state.printMethods.find((method) => method.id === order.printMethodId);
+  const fallbackParts = printMethodCostParts(selectedMethod, selectedProduct);
+  const laborCost = Number(order.printLaborUnitCost || 0) || fallbackParts.labor;
+  const materialCost = Number(order.printMaterialUnitCost || 0) || Math.max(0, Number(order.printUnitCost || 0) - laborCost);
   const values = {
     originalId: order.id, id: order.id, sellerId: order.sellerId, requestType: order.requestType, status: order.status,
     client: order.client, clientPhone: order.clientPhone, clientEmail: order.clientEmail, deliveryAddress: order.deliveryAddress,
     product: order.product, printMethodId: order.printMethodId, quantity: order.quantity, source: order.source,
-    baseUnitCost: order.baseUnitCost, printUnitCost: order.printUnitCost, sellerUnitCost: order.sellerUnitCost,
+    baseUnitCost: order.baseUnitCost, printUnitCost: order.printUnitCost, printMaterialUnitCost: materialCost,
+    printLaborUnitCost: laborCost, sellerUnitCost: order.sellerUnitCost,
     saleMarkup: order.saleMarkup, saleUnitPrice: order.saleUnitPrice, commissionRate: order.commissionRate,
     requestedDate: order.requestedDate, committedDate: order.committedDate, payment50: String(Boolean(order.payment50)),
     inventoryState: order.inventoryState, quoteMeasures: order.quoteMeasures, quoteBaseColors: order.quoteBaseColors,
@@ -2451,6 +2475,9 @@ async function saveEditedOrder(event) {
   const quantity = Number(data.quantity || 0);
   const unitPrice = Number(data.saleUnitPrice || 0);
   const commissionRate = Number(data.saleMarkup || 0);
+  const materialCost = Number(data.printMaterialUnitCost || 0);
+  const laborCost = Number(data.printLaborUnitCost || 0);
+  const printCost = materialCost || laborCost ? materialCost + laborCost : Number(data.printUnitCost || 0);
   Object.assign(order, {
     id: data.id.trim(), sellerId: data.sellerId, seller: seller?.name || order.seller,
     requestType: data.requestType, status: data.status, client: data.client.trim(), clientPhone: data.clientPhone,
@@ -2458,7 +2485,8 @@ async function saveEditedOrder(event) {
     productCategory: product?.category || inferProductCategory(data.product), productVariant: product?.variant || "",
     productColor: product?.color || "", stockCode: cleanProductCode(product?.productCode), printMethodId: data.printMethodId,
     printMethod: method?.name || "Sin impresion", quantity, source: data.source,
-    baseUnitCost: Number(data.baseUnitCost || 0), printUnitCost: Number(data.printUnitCost || 0),
+    baseUnitCost: Number(data.baseUnitCost || 0), printUnitCost: printCost,
+    printMaterialUnitCost: materialCost, printLaborUnitCost: laborCost,
     sellerUnitCost: Number(data.sellerUnitCost || 0), saleMarkup: Number(data.saleMarkup || 0), saleUnitPrice: unitPrice,
     saleTotal: unitPrice * quantity, commissionRate, commissionAmount: (unitPrice - Number(data.sellerUnitCost || 0)) * quantity,
     requestedDate: data.requestedDate, committedDate: data.committedDate, payment50: data.payment50 === "true",
