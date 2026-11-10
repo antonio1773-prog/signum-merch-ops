@@ -1185,6 +1185,7 @@ function orderListTemplate(orders, mode) {
 function orderMatrixTemplate(orders) {
   const rows = orders.sort((a, b) => b.createdAt - a.createdAt);
   if (!rows.length) return `<div class="empty-state panel">No hay pedidos para esta vista.</div>`;
+  const directionCosts = currentUser().role === "direccion";
   return `
     <div class="matrix-table-wrap" role="region" aria-label="Matriz de pedidos" tabindex="0">
       <table class="orders-matrix">
@@ -1199,9 +1200,7 @@ function orderMatrixTemplate(orders) {
             <th>Direccion entrega</th>
             <th>Producto</th>
             <th>Cant.</th>
-            <th>Precio venta</th>
-            <th>Total</th>
-            <th>Comision</th>
+            ${directionCosts ? `<th>Costo producto/u.</th><th>Costo impresion/u.</th><th>Costo directo total</th><th>Precio vendedor/u.</th><th>Total vendedor</th><th>Margen Signum</th><th>Markup vendedor</th><th>Precio final/u.</th><th>Venta total</th><th>Comision vendedor</th>` : `<th>Precio venta</th><th>Total</th><th>Comision</th>`}
             <th>Origen</th>
             <th>Sena</th>
             <th>Fecha ideal</th>
@@ -1223,6 +1222,12 @@ function matrixRowTemplate(order) {
   const contact = [order.clientPhone, order.clientEmail].filter(Boolean).join(" / ") || "Sin contacto";
   const actions = actionButtons(order, "workflow");
   const quoteDetails = orderQuoteDetails(order);
+  const directionCosts = currentUser().role === "direccion";
+  const quantity = Number(order.quantity || 0);
+  const baseTotal = Number(order.baseUnitCost || 0) * quantity;
+  const printTotal = Number(order.printUnitCost || 0) * quantity;
+  const sellerTotal = Number(order.sellerUnitCost || 0) * quantity;
+  const signumMargin = sellerTotal - baseTotal - printTotal;
   return `
     <tr>
       <td><strong>${order.id}</strong></td>
@@ -1234,9 +1239,20 @@ function matrixRowTemplate(order) {
       <td>${order.deliveryAddress || "Sin direccion"}</td>
       <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span>${quoteDetails ? `<br><span class="meta"><strong>Presupuesto:</strong> ${quoteDetails}</span>` : ""}</td>
       <td class="number-cell">${order.quantity}</td>
-      <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
-      <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
-      <td class="number-cell">${money(order.commissionAmount || 0)}${order.commissionRate ? `<br><span class="meta">${order.commissionRate}%</span>` : ""}</td>
+      ${directionCosts ? `
+        <td class="number-cell">${money(order.baseUnitCost || 0)}</td>
+        <td class="number-cell">${money(order.printUnitCost || 0)}</td>
+        <td class="number-cell">${money(baseTotal + printTotal)}</td>
+        <td class="number-cell">${money(order.sellerUnitCost || 0)}</td>
+        <td class="number-cell">${money(sellerTotal)}</td>
+        <td class="number-cell">${money(signumMargin)}</td>
+        <td class="number-cell">${Number(order.saleMarkup || 0).toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</td>
+        <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
+        <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
+        <td class="number-cell">${money(orderCommissionAmount(order))}</td>` : `
+        <td class="number-cell">${money(order.saleUnitPrice || productPrice(order.product))}</td>
+        <td class="number-cell"><strong>${money(order.saleTotal || orderRevenue(order))}</strong></td>
+        <td class="number-cell">${money(orderCommissionAmount(order))}${order.commissionRate ? `<br><span class="meta">${order.commissionRate}%</span>` : ""}</td>`}
       <td>${order.source === "taller" ? "Taller" : "Fabrica"}</td>
       <td>${order.payment50 ? "Confirmada" : "Pendiente"}</td>
       <td>${formatDate(order.requestedDate)}</td>
@@ -1266,7 +1282,7 @@ function orderTemplate(order, mode) {
         <div class="meta-box"><span>Cantidad</span><strong>${order.quantity}</strong></div>
         <div class="meta-box"><span>Precio venta</span><strong>${money(order.saleUnitPrice || productPrice(order.product))}</strong></div>
         <div class="meta-box"><span>Total venta</span><strong>${money(order.saleTotal || orderRevenue(order))}</strong></div>
-        <div class="meta-box"><span>Comision</span><strong>${money(order.commissionAmount || 0)}</strong></div>
+        <div class="meta-box"><span>Comision</span><strong>${money(orderCommissionAmount(order))}</strong></div>
         <div class="meta-box"><span>Destino</span><strong>${order.source === "taller" ? "Taller" : "Fabrica"}</strong></div>
         <div class="meta-box"><span>Sena 50%</span><strong>${order.payment50 ? "Confirmada" : "Pendiente"}</strong></div>
         <div class="meta-box"><span>Fecha ideal</span><strong>${formatDate(order.requestedDate)}</strong></div>
@@ -1409,14 +1425,36 @@ function renderMetrics() {
   const totalUnits = orders.reduce((sum, order) => sum + Number(order.quantity), 0);
   const pending = orders.filter((order) => !["fecha_confirmada", "produccion", "logistica", "entregado", "rechazado"].includes(order.status)).length;
   const approved = orders.filter((order) => ["fecha_confirmada", "produccion", "logistica", "entregado"].includes(order.status)).length;
-  $("#metrics").innerHTML = [
+  const cards = [
     ["Pedidos visibles", orders.length],
     ["Pendientes", pending],
     ["Aprobados", approved],
     ["Unidades", totalUnits]
-  ]
+  ];
+  if (currentUser().role === "direccion") {
+    const salesOrders = orders.filter((order) => order.requestType === "pedido" && !["rechazado", "cancelado", "devolucion"].includes(order.status));
+    const sales = salesOrders.reduce((sum, order) => sum + Number(order.saleTotal || orderRevenue(order)), 0);
+    const commissions = salesOrders.reduce((sum, order) => sum + orderCommissionAmount(order), 0);
+    const workshop = sales - commissions;
+    const directCosts = salesOrders.reduce((sum, order) => sum + (Number(order.baseUnitCost || 0) + Number(order.printUnitCost || 0)) * Number(order.quantity || 0), 0);
+    cards.push(
+      ["Ventas cargadas", money(sales)],
+      ["Comisiones vendedores", money(commissions)],
+      ["Taller / Signum", money(workshop)],
+      ["Costos directos", money(directCosts)],
+      ["Margen Signum estimado", money(workshop - directCosts)]
+    );
+  }
+  $("#metrics").innerHTML = cards
     .map(([label, value]) => `<article class="metric"><span>${label}</span><strong>${value}</strong></article>`)
     .join("");
+}
+
+function orderCommissionAmount(order) {
+  const finalUnitPrice = Number(order.saleUnitPrice || 0);
+  const sellerUnitPrice = Number(order.sellerUnitCost || 0);
+  const quantity = Number(order.quantity || 0);
+  return finalUnitPrice && sellerUnitPrice ? (finalUnitPrice - sellerUnitPrice) * quantity : Number(order.commissionAmount || 0);
 }
 
 function productPrice(productName) {
