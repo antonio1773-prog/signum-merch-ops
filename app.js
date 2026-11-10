@@ -715,7 +715,7 @@ function render() {
   $("#pageTitle").textContent = activeView === "planning" && !canEditPlanning() ? "Promociones y dinamicas" : viewTitles[activeView];
   $("#sellerBadge").textContent = user.name;
   $("#sellerMenuWrap").classList.toggle("is-hidden", user.role !== "vendedor");
-  $("#internalSellerCostField").classList.toggle("is-hidden", user.role === "vendedor");
+  $("#internalSellerCostField").classList.remove("is-hidden");
   $("#navTabs").classList.toggle("is-hidden", user.role === "vendedor");
   $("#planningForms").classList.toggle("is-hidden", !canEditPlanning());
   $("#commercialCostPanel").classList.toggle("is-hidden", !canEditPlanning());
@@ -1523,6 +1523,7 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   $("#salePreview").classList.toggle("compact", !canEditPlanning());
   $("#salePreview").innerHTML = `
     ${canEditPlanning() ? `<div><span>Costo producto base</span><strong>${money(baseCost)}</strong></div><div><span>Costo impresion</span><strong>${money(printCost)}</strong></div>` : ""}
+    <div><span>Precio al vendedor</span><strong>${money(sellerCost)}</strong></div>
     <div><span>Precio final por unidad</span><strong>${money(unitPrice)}</strong></div>
     ${discountScale ? `<div><span>Descuento aplicado</span><strong>${Number(discountScale.discountRate).toLocaleString("es-AR")}% · ${Number(discountScale.minQuantity)} a ${Number(discountScale.maxQuantity)} u.</strong></div>` : ""}
     <div><span>Markup aplicado</span><strong>${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%</strong></div>

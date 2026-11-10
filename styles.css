@@ -555,7 +555,7 @@ h3 {
 
 .sale-preview {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 8px;
   margin-bottom: 14px;
 }
@@ -610,7 +610,7 @@ h3 {
 }
 
 .sale-preview.compact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 }
 
 #sellerUnitCost[readonly] {
