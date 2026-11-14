@@ -8,7 +8,7 @@
       name="description"
       content="Sistema interno para vendedores, planeamiento comercial, taller propio y fabrica."
     />
-    <link rel="stylesheet" href="./styles.css?v=signum-theme-26" />
+    <link rel="stylesheet" href="./styles.css?v=signum-theme-27" />
   </head>
   <body>
     <section class="login-screen" id="loginScreen">
@@ -134,6 +134,22 @@
             <div class="product-scale-info" id="productScaleInfo"></div>
 
             <div class="sale-preview" id="salePreview"></div>
+
+            <div class="multi-product-actions">
+              <button class="ghost-button" id="addOrderItemButton" type="button">+ Agregar otro producto</button>
+              <span>Podés incluir varios productos para el mismo cliente.</span>
+            </div>
+
+            <section class="order-items-panel is-hidden" id="orderItemsPanel">
+              <div class="section-header compact">
+                <div>
+                  <h3>Productos de esta venta</h3>
+                  <p>Todos se enviarán juntos con los datos del cliente que completes abajo.</p>
+                </div>
+              </div>
+              <div class="order-items-list" id="orderItemsList"></div>
+              <div class="order-items-total" id="orderItemsTotal"></div>
+            </section>
 
             <section class="panel large-sale-panel is-hidden" id="largeSalePanel">
               <div class="section-header compact">
@@ -866,6 +882,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-38"></script>
+    <script src="./app.js?v=signum-ops-39"></script>
   </body>
 </html>

@@ -169,6 +169,8 @@ let activeUserId = sessionStorage.getItem("signum-active-user") || "";
 let activeView = "new-order";
 let activeProductCategory = "";
 let purchaseCostMode = "total";
+let pendingOrderItems = [];
+let currentOrderItemSaved = false;
 
 const roleLabels = {
   vendedor: "Vendedor",
@@ -605,11 +607,16 @@ function setup() {
   $("#workflowSearch").addEventListener("input", renderWorkflow);
   $("#workflowFilter").addEventListener("change", renderWorkflow);
   $("#orderForm").addEventListener("submit", createOrder);
+  $("#addOrderItemButton").addEventListener("click", addCurrentOrderItem);
   $("#productSelect").addEventListener("change", () => updateProductConfiguration(true));
   $("#printMethodSelect").addEventListener("change", () => updateSalePreview(true));
   $("#saleMarkup").addEventListener("input", () => updateSalePreview(false, "markup"));
   $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false, "price"));
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false, "quantity"));
+  ["product", "printMethod", "quantity", "requestedDate", "saleMarkup", "saleUnitPrice", "requestType", "quoteMeasures", "quoteBaseColors", "quoteHandleColor", "quoteHandleSize", "quoteShape", "notes"].forEach((name) => {
+    const fields = $$(`#orderForm [name='${name}']`);
+    fields.forEach((field) => field.addEventListener("input", () => { currentOrderItemSaved = false; }));
+  });
   $$("#orderForm input[name='requestType']").forEach((input) => input.addEventListener("change", updateLargeSalePanel));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
@@ -1583,6 +1590,80 @@ function updateSalePreview(resetPrice = false, changedField = "") {
     <div><span>Comision vendedor (${markup.toLocaleString("es-AR", { maximumFractionDigits: 2 })}%)</span><strong>${money(commission)}</strong></div>`;
 }
 
+function currentOrderItem() {
+  const form = $("#orderForm");
+  const data = Object.fromEntries(new FormData(form));
+  const product = state.products.find((item) => item.name === data.product);
+  const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
+  if (!product) return null;
+  const quantity = Math.max(1, Number(data.quantity || 1));
+  const isFactory = product.source === "fabrica";
+  const requestType = isFactory ? "presupuesto" : data.requestType;
+  return {
+    key: uid(),
+    productId: product.id,
+    product: product.name,
+    productCategory: product.category || inferProductCategory(product.name),
+    productVariant: product.variant || "",
+    productColor: product.color || "",
+    printMethodId: printMethod?.id || "sin-impresion",
+    printMethod: printMethod?.name || "Sin impresion",
+    quantity,
+    requestedDate: data.requestedDate,
+    sellerUnitCost: Number(data.sellerUnitCost || 0),
+    saleMarkup: Number(data.saleMarkup || 0),
+    saleUnitPrice: Number(data.saleUnitPrice || product.price || 0),
+    requestType,
+    quoteMeasures: requestType === "pedido" ? "" : data.quoteMeasures || "",
+    quoteBaseColors: requestType === "pedido" ? "" : data.quoteBaseColors || "",
+    quoteHandleColor: requestType === "pedido" ? "" : data.quoteHandleColor || "",
+    quoteHandleSize: requestType === "pedido" ? "" : data.quoteHandleSize || "",
+    quoteShape: requestType === "pedido" ? "" : data.quoteShape || "",
+    notes: data.notes || ""
+  };
+}
+
+function addCurrentOrderItem() {
+  const item = currentOrderItem();
+  if (!item) {
+    alert("Seleccioná un producto para agregarlo a la venta.");
+    return;
+  }
+  const product = state.products.find((entry) => entry.id === item.productId);
+  const alreadyReserved = pendingOrderItems
+    .filter((entry) => entry.requestType === "pedido" && entry.productId === item.productId)
+    .reduce((sum, entry) => sum + entry.quantity, 0);
+  if (item.requestType === "pedido" && inventoryFor(product.productCode).available < alreadyReserved + item.quantity) {
+    alert(`Stock insuficiente. Hay ${inventoryFor(product.productCode).available} unidades disponibles y ya agregaste ${alreadyReserved}.`);
+    return;
+  }
+  pendingOrderItems.push(item);
+  currentOrderItemSaved = true;
+  renderPendingOrderItems();
+  $("#productCategoryGrid").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderPendingOrderItems() {
+  const panel = $("#orderItemsPanel");
+  panel.classList.toggle("is-hidden", !pendingOrderItems.length);
+  $("#orderItemsList").innerHTML = pendingOrderItems.map((item, index) => `
+    <article class="order-item-row">
+      <div><strong>${index + 1}. ${escapeHtml(item.product)}</strong><span>${escapeHtml(item.productVariant || item.productColor || "")} · ${escapeHtml(item.printMethod)} · ${item.quantity} u.</span></div>
+      <div><strong>${money(item.saleUnitPrice * item.quantity)}</strong><span>${money(item.saleUnitPrice)} por unidad</span></div>
+      <button class="small-button danger-inline" type="button" data-remove-order-item="${item.key}">Quitar</button>
+    </article>`).join("");
+  const totalUnits = pendingOrderItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalSale = pendingOrderItems.reduce((sum, item) => sum + item.saleUnitPrice * item.quantity, 0);
+  $("#orderItemsTotal").innerHTML = `<span>${pendingOrderItems.length} producto${pendingOrderItems.length === 1 ? "" : "s"} · ${totalUnits} unidades</span><strong>Total ${money(totalSale)}</strong>`;
+  $$('[data-remove-order-item]').forEach((button) => button.addEventListener("click", () => {
+    const removed = pendingOrderItems.find((item) => item.key === button.dataset.removeOrderItem);
+    const draft = currentOrderItem();
+    pendingOrderItems = pendingOrderItems.filter((item) => item.key !== button.dataset.removeOrderItem);
+    currentOrderItemSaved = Boolean(removed && draft && removed.productId === draft.productId && removed.printMethodId === draft.printMethodId && removed.quantity === draft.quantity && removed.saleUnitPrice === draft.saleUnitPrice);
+    renderPendingOrderItems();
+  }));
+}
+
 function financeTotals() {
   const transactions = state.finance?.transactions || [];
   const purchases = transactions.filter((item) => item.type === "compra").reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -2024,76 +2105,88 @@ async function createOrder(event) {
   const user = currentUser();
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
-  const product = state.products.find((item) => item.name === data.product);
-  const printMethod = state.printMethods.find((item) => item.id === data.printMethod);
-  const printParts = printMethodCostParts(printMethod, product);
-  const quantity = Number(data.quantity || 0);
-  const saleUnitPrice = Number(data.saleUnitPrice || product?.price || 0);
-  const sellerUnitCost = Number(data.sellerUnitCost || 0);
-  const saleMarkup = Number(data.saleMarkup || 0);
-  const discountScale = discountScaleForProduct(product, quantity);
-  const commissionRate = saleMarkup;
-  const isFactory = product?.source === "fabrica";
-  const isOrder = data.requestType === "pedido" && !isFactory;
-  if (!product) {
+  const draftItem = currentOrderItem();
+  const items = [...pendingOrderItems];
+  if (!currentOrderItemSaved && draftItem) items.push(draftItem);
+  if (!items.length) {
     alert("Selecciona un producto con stock disponible.");
     return;
   }
-  if (isOrder && inventoryFor(product.productCode).available < quantity) {
-    alert(`Stock insuficiente. Hay ${inventoryFor(product.productCode).available} unidades disponibles.`);
-    renderProducts();
-    return;
+  const requestedByCode = new Map();
+  items.filter((item) => item.requestType === "pedido").forEach((item) => {
+    const product = state.products.find((entry) => entry.id === item.productId);
+    const code = cleanProductCode(product?.productCode);
+    requestedByCode.set(code, (requestedByCode.get(code) || 0) + item.quantity);
+  });
+  for (const [code, requested] of requestedByCode) {
+    const available = inventoryFor(code).available;
+    if (available < requested) {
+      alert(`Stock insuficiente para ${code}. Hay ${available} unidades disponibles y el pedido necesita ${requested}.`);
+      renderProducts();
+      return;
+    }
   }
   const referenceFile = form.referenceImage.files[0];
   const referenceImage = await readImage(referenceFile);
   upsertClient(data.client, data.clientPhone, data.clientEmail);
-  state.orders.push({
-    id: nextOrderId(),
+  const orderGroupId = `VENTA-${Date.now().toString(36).toUpperCase()}`;
+  items.forEach((item) => {
+    const product = state.products.find((entry) => entry.id === item.productId);
+    const printMethod = state.printMethods.find((entry) => entry.id === item.printMethodId);
+    const printParts = printMethodCostParts(printMethod, product);
+    const discountScale = discountScaleForProduct(product, item.quantity);
+    const isOrder = item.requestType === "pedido";
+    state.orders.push({
+    id: nextOrderId(), orderGroupId,
     sellerId: user.id,
     seller: user.name,
     client: data.client,
     clientPhone: data.clientPhone,
     clientEmail: data.clientEmail,
     deliveryAddress: data.deliveryAddress,
-    product: data.product,
-    productCategory: product.category || inferProductCategory(product.name),
-    productVariant: product.variant || "",
-    productColor: product.color || "",
-    printMethodId: printMethod?.id || "sin-impresion",
-    printMethod: printMethod?.name || "Sin impresion",
-    quoteMeasures: isOrder ? "" : data.quoteMeasures || "",
-    quoteBaseColors: isOrder ? "" : data.quoteBaseColors || "",
-    quoteHandleColor: isOrder ? "" : data.quoteHandleColor || "",
-    quoteHandleSize: isOrder ? "" : data.quoteHandleSize || "",
-    quoteShape: isOrder ? "" : data.quoteShape || "",
+    product: item.product,
+    productCategory: item.productCategory,
+    productVariant: item.productVariant,
+    productColor: item.productColor,
+    printMethodId: item.printMethodId,
+    printMethod: item.printMethod,
+    quoteMeasures: item.quoteMeasures,
+    quoteBaseColors: item.quoteBaseColors,
+    quoteHandleColor: item.quoteHandleColor,
+    quoteHandleSize: item.quoteHandleSize,
+    quoteShape: item.quoteShape,
     baseUnitCost: productBaseCost(product),
     printUnitCost: printMethodCostForProduct(printMethod, product),
     printMaterialUnitCost: printParts.materials,
     printLaborUnitCost: printParts.labor,
-    quantity,
-    sellerUnitCost,
-    saleMarkup,
-    saleUnitPrice,
-    saleTotal: saleUnitPrice * quantity,
+    quantity: item.quantity,
+    sellerUnitCost: item.sellerUnitCost,
+    saleMarkup: item.saleMarkup,
+    saleUnitPrice: item.saleUnitPrice,
+    saleTotal: item.saleUnitPrice * item.quantity,
     discountScaleId: discountScale?.id || "",
     discountRate: Number(discountScale?.discountRate || 0),
-    commissionRate,
-    commissionAmount: (saleUnitPrice - sellerUnitCost) * quantity,
+    commissionRate: item.saleMarkup,
+    commissionAmount: (item.saleUnitPrice - item.sellerUnitCost) * item.quantity,
     source: product?.source || "taller",
     stockCode: cleanProductCode(product.productCode),
     inventoryState: isOrder ? "reserved" : "",
-    requestedDate: data.requestedDate,
+    requestedDate: item.requestedDate,
     committedDate: "",
-    requestType: isFactory ? "presupuesto" : data.requestType,
+    requestType: item.requestType,
     referenceImage,
     referenceFileName: referenceFile?.name || "",
     referenceFileType: referenceFile?.type || "",
     payment50: false,
     status: isOrder ? "pedido_planeamiento" : "presupuesto_planeamiento",
-    notes: data.notes,
+    notes: item.notes,
     comment: "",
     createdAt: Date.now()
+    });
   });
+  pendingOrderItems = [];
+  currentOrderItemSaved = false;
+  renderPendingOrderItems();
   form.reset();
   form.requestType.value = "pedido";
   form.requestedDate.value = iso(7);

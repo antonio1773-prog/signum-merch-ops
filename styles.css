@@ -1078,6 +1078,48 @@ h3 {
   gap: 16px;
 }
 
+.multi-product-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.multi-product-actions span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.order-items-panel {
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 16px;
+  padding: 18px;
+  background: rgba(124, 92, 255, 0.06);
+}
+
+.order-items-list { display: grid; gap: 8px; }
+
+.order-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.order-item-row > div { display: grid; gap: 3px; }
+.order-item-row span { color: var(--muted); font-size: 0.8rem; }
+.order-items-total { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+
+@media (max-width: 680px) {
+  .order-item-row { grid-template-columns: 1fr auto; }
+  .order-item-row > div:nth-child(2) { text-align: right; }
+  .order-item-row button { grid-column: 1 / -1; }
+}
+
 .form-head {
   display: flex;
   justify-content: space-between;
