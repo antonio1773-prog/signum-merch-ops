@@ -955,7 +955,7 @@ function printMethodCostParts(method, product) {
   const category = product?.category || inferProductCategory(product?.name);
   const isBagProcess = method.id !== "sin-impresion" && category === "bolsa";
   const divisor = isBagProcess ? Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`))) : 1;
-  const textileMultiplier = category === "remera" && method.id !== "sin-impresion" ? 1.5 : 1;
+  const textileMultiplier = category === "remera" && method.id !== "sin-impresion" ? 1.25 : 1;
   const total = Number(method.unitCost || 0) * textileMultiplier / divisor;
   const labor = Number(method.breakdown?.labor || 0) * textileMultiplier / divisor;
   return { labor, materials: Math.max(0, total - labor) };
@@ -1093,7 +1093,7 @@ function updateProductConfiguration(resetPrice = true) {
     orderRadio.disabled = false;
     if (!quoteMode) orderRadio.checked = true;
   }
-  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 50% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 150%." : ""}</p>` : "";
+  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 25% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 125%." : ""}</p>` : "";
   updateLargeSalePanel();
   updateSalePreview(resetPrice);
 }
@@ -1566,7 +1566,7 @@ function productBaseCost(product) {
   const rawCost = Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
   const category = product.category || inferProductCategory(product.name);
   if (category === "taza") return rawCost / 0.67;
-  if (category === "remera") return rawCost / 0.5;
+  if (category === "remera") return rawCost / 0.75;
   return rawCost;
 }
 
