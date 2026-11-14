@@ -446,6 +446,8 @@ function normalizeState(rawState) {
     printUnitCost: 0,
     printMaterialUnitCost: 0,
     printLaborUnitCost: 0,
+    printCount: 1,
+    printPassCount: 1,
     discountScaleId: "",
     discountRate: 0,
     ...order,
@@ -668,10 +670,11 @@ function setup() {
   $("#addOrderItemButton").addEventListener("click", addCurrentOrderItem);
   $("#productSelect").addEventListener("change", () => updateProductConfiguration(true));
   $("#printMethodSelect").addEventListener("change", () => updateSalePreview(true));
+  $$("#orderForm .textile-print-field input").forEach((input) => input.addEventListener("input", () => updateSalePreview(true)));
   $("#saleMarkup").addEventListener("input", () => updateSalePreview(false, "markup"));
   $("#saleUnitPrice").addEventListener("input", () => updateSalePreview(false, "price"));
   $("#orderForm input[name='quantity']").addEventListener("input", () => updateSalePreview(false, "quantity"));
-  ["product", "printMethod", "quantity", "requestedDate", "saleMarkup", "saleUnitPrice", "requestType", "quoteMeasures", "quoteBaseColors", "quoteHandleColor", "quoteHandleSize", "quoteShape", "notes"].forEach((name) => {
+  ["product", "printMethod", "printCount", "printPassCount", "quantity", "requestedDate", "saleMarkup", "saleUnitPrice", "requestType", "quoteMeasures", "quoteBaseColors", "quoteHandleColor", "quoteHandleSize", "quoteShape", "notes"].forEach((name) => {
     const fields = $$(`#orderForm [name='${name}']`);
     fields.forEach((field) => field.addEventListener("input", () => { currentOrderItemSaved = false; }));
   });
@@ -949,11 +952,20 @@ function printMethodCostForProduct(method, product) {
 
 function printMethodCostParts(method, product) {
   if (!method) return { materials: 0, labor: 0 };
-  const isBagProcess = method.id !== "sin-impresion" && (product?.category || inferProductCategory(product?.name)) === "bolsa";
+  const category = product?.category || inferProductCategory(product?.name);
+  const isBagProcess = method.id !== "sin-impresion" && category === "bolsa";
   const divisor = isBagProcess ? Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`))) : 1;
-  const total = Number(method.unitCost || 0) / divisor;
-  const labor = Number(method.breakdown?.labor || 0) / divisor;
+  const textileMultiplier = category === "remera" && method.id !== "sin-impresion" ? 1.5 : 1;
+  const total = Number(method.unitCost || 0) * textileMultiplier / divisor;
+  const labor = Number(method.breakdown?.labor || 0) * textileMultiplier / divisor;
   return { labor, materials: Math.max(0, total - labor) };
+}
+
+function configuredPrintCostParts(method, product, printCount = 1, printPassCount = 1) {
+  const parts = printMethodCostParts(method, product);
+  const textile = (product?.category || inferProductCategory(product?.name)) === "remera";
+  const multiplier = textile ? Math.max(1, Number(printCount || 1)) * Math.max(1, Number(printPassCount || 1)) : 1;
+  return { materials: parts.materials * multiplier, labor: parts.labor * multiplier };
 }
 
 function commercialCostDefaults(sourceState = state) {
@@ -1070,6 +1082,8 @@ function updateProductConfiguration(resetPrice = true) {
   const recommended = methods.find((method) => method.id === "sublimacion") || methods.find((method) => method.id === "dtf") || methods.find((method) => method.id === "grabado") || methods[0];
   $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(printMethodCostForProduct(method, product))}</option>`).join("");
   const factory = product?.source === "fabrica";
+  const isTextile = (product?.category || inferProductCategory(product?.name)) === "remera";
+  $$("#orderForm .textile-print-field").forEach((field) => field.classList.toggle("is-hidden", !isTextile));
   const quoteMode = form.querySelector('[name="requestType"][value="presupuesto"]')?.checked;
   const orderRadio = form.querySelector('[name="requestType"][value="pedido"]');
   if (factory) {
@@ -1079,7 +1093,7 @@ function updateProductConfiguration(resetPrice = true) {
     orderRadio.disabled = false;
     if (!quoteMode) orderRadio.checked = true;
   }
-  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}</p>` : "";
+  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 50% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 150%." : ""}</p>` : "";
   updateLargeSalePanel();
   updateSalePreview(resetPrice);
 }
@@ -1322,7 +1336,7 @@ function matrixRowTemplate(order) {
       <td>${order.client}</td>
       <td>${contact}</td>
       <td>${order.deliveryAddress || "Sin direccion"}</td>
-      <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod].filter(Boolean).join(" · ")}</span>${quoteDetails ? `<br><span class="meta"><strong>Presupuesto:</strong> ${quoteDetails}</span>` : ""}</td>
+      <td>${order.product}<br><span class="meta">${[order.productVariant, order.productColor, order.printMethod, order.productCategory === "remera" ? `${order.printCount || 1} impresión(es) × ${order.printPassCount || 1} pasada(s)` : ""].filter(Boolean).join(" · ")}</span>${quoteDetails ? `<br><span class="meta"><strong>Presupuesto:</strong> ${quoteDetails}</span>` : ""}</td>
       <td class="number-cell">${order.quantity}</td>
       ${directionCosts ? `
         <td class="number-cell">${money(baseTotal)}</td>
@@ -1551,7 +1565,9 @@ function productBaseCost(product) {
   const pricing = product.source === "fabrica" ? null : latestPricingForCode(product.productCode);
   const rawCost = Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
   const category = product.category || inferProductCategory(product.name);
-  return category === "taza" ? rawCost / 0.67 : rawCost;
+  if (category === "taza") return rawCost / 0.67;
+  if (category === "remera") return rawCost / 0.5;
+  return rawCost;
 }
 
 function discountScaleUsage(scaleId) {
@@ -1617,7 +1633,8 @@ function updateSalePreview(resetPrice = false, changedField = "") {
   const product = state.products.find((item) => item.name === form.product.value);
   const method = state.printMethods.find((item) => item.id === form.printMethod.value);
   const baseCost = productBaseCost(product);
-  const printCost = printMethodCostForProduct(method, product);
+  const printParts = configuredPrintCostParts(method, product, form.printCount?.value, form.printPassCount?.value);
+  const printCost = printParts.materials + printParts.labor;
   const commercialRate = signumMarginRate();
   const directCost = baseCost + printCost;
   const rawSuggested = commercialRate < 100 ? directCost / (1 - commercialRate / 100) : directCost;
@@ -1672,6 +1689,8 @@ function currentOrderItem() {
     productColor: product.color || "",
     printMethodId: printMethod?.id || "sin-impresion",
     printMethod: printMethod?.name || "Sin impresion",
+    printCount: Math.max(1, Number(data.printCount || 1)),
+    printPassCount: Math.max(1, Number(data.printPassCount || 1)),
     quantity,
     requestedDate: data.requestedDate,
     sellerUnitCost: Number(data.sellerUnitCost || 0),
@@ -1712,7 +1731,7 @@ function renderPendingOrderItems() {
   panel.classList.toggle("is-hidden", !pendingOrderItems.length);
   $("#orderItemsList").innerHTML = pendingOrderItems.map((item, index) => `
     <article class="order-item-row">
-      <div><strong>${index + 1}. ${escapeHtml(item.product)}</strong><span>${escapeHtml(item.productVariant || item.productColor || "")} · ${escapeHtml(item.printMethod)} · ${item.quantity} u.</span></div>
+      <div><strong>${index + 1}. ${escapeHtml(item.product)}</strong><span>${escapeHtml(item.productVariant || item.productColor || "")} · ${escapeHtml(item.printMethod)}${item.productCategory === "remera" ? ` · ${item.printCount} impresion(es) × ${item.printPassCount} pasada(s)` : ""} · ${item.quantity} u.</span></div>
       <div><strong>${money(item.saleUnitPrice * item.quantity)}</strong><span>${money(item.saleUnitPrice)} por unidad</span></div>
       <button class="small-button danger-inline" type="button" data-remove-order-item="${item.key}">Quitar</button>
     </article>`).join("");
@@ -2197,7 +2216,7 @@ async function createOrder(event) {
   items.forEach((item) => {
     const product = state.products.find((entry) => entry.id === item.productId);
     const printMethod = state.printMethods.find((entry) => entry.id === item.printMethodId);
-    const printParts = printMethodCostParts(printMethod, product);
+    const printParts = configuredPrintCostParts(printMethod, product, item.printCount, item.printPassCount);
     const discountScale = discountScaleForProduct(product, item.quantity);
     const isOrder = item.requestType === "pedido";
     state.orders.push({
@@ -2214,13 +2233,15 @@ async function createOrder(event) {
     productColor: item.productColor,
     printMethodId: item.printMethodId,
     printMethod: item.printMethod,
+    printCount: item.printCount,
+    printPassCount: item.printPassCount,
     quoteMeasures: item.quoteMeasures,
     quoteBaseColors: item.quoteBaseColors,
     quoteHandleColor: item.quoteHandleColor,
     quoteHandleSize: item.quoteHandleSize,
     quoteShape: item.quoteShape,
     baseUnitCost: productBaseCost(product),
-    printUnitCost: printMethodCostForProduct(printMethod, product),
+    printUnitCost: printParts.materials + printParts.labor,
     printMaterialUnitCost: printParts.materials,
     printLaborUnitCost: printParts.labor,
     quantity: item.quantity,
@@ -2600,7 +2621,8 @@ function openEditOrder(orderId) {
   const values = {
     originalId: order.id, id: order.id, sellerId: order.sellerId, requestType: order.requestType, status: order.status,
     client: order.client, clientPhone: order.clientPhone, clientEmail: order.clientEmail, deliveryAddress: order.deliveryAddress,
-    product: order.product, printMethodId: order.printMethodId, quantity: order.quantity, source: order.source,
+    product: order.product, printMethodId: order.printMethodId, printCount: order.printCount || 1,
+    printPassCount: order.printPassCount || 1, quantity: order.quantity, source: order.source,
     baseUnitCost: order.baseUnitCost, printUnitCost: order.printUnitCost, printMaterialUnitCost: materialCost,
     printLaborUnitCost: laborCost, sellerUnitCost: order.sellerUnitCost,
     saleMarkup: order.saleMarkup, saleUnitPrice: order.saleUnitPrice, commissionRate: order.commissionRate,
@@ -2640,7 +2662,8 @@ async function saveEditedOrder(event) {
     clientEmail: data.clientEmail, deliveryAddress: data.deliveryAddress, product: data.product,
     productCategory: product?.category || inferProductCategory(data.product), productVariant: product?.variant || "",
     productColor: product?.color || "", stockCode: cleanProductCode(product?.productCode), printMethodId: data.printMethodId,
-    printMethod: method?.name || "Sin impresion", quantity, source: data.source,
+    printMethod: method?.name || "Sin impresion", printCount: Math.max(1, Number(data.printCount || 1)),
+    printPassCount: Math.max(1, Number(data.printPassCount || 1)), quantity, source: data.source,
     baseUnitCost: Number(data.baseUnitCost || 0), printUnitCost: printCost,
     printMaterialUnitCost: materialCost, printLaborUnitCost: laborCost,
     sellerUnitCost: Number(data.sellerUnitCost || 0), saleMarkup: Number(data.saleMarkup || 0), saleUnitPrice: unitPrice,

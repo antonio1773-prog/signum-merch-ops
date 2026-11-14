@@ -107,6 +107,14 @@
                 <span>Tipo de impresion</span>
                 <select name="printMethod" id="printMethodSelect" required></select>
               </label>
+              <label class="field textile-print-field is-hidden">
+                <span>Impresiones por prenda</span>
+                <input name="printCount" type="number" min="1" step="1" value="1" required />
+              </label>
+              <label class="field textile-print-field is-hidden">
+                <span>Pasadas por impresion</span>
+                <input name="printPassCount" type="number" min="1" step="1" value="1" required />
+              </label>
               <label class="field">
                 <span>Cantidad</span>
                 <input name="quantity" type="number" min="1" required value="50" />
@@ -850,6 +858,8 @@
           <label class="field"><span>Direccion de entrega</span><input name="deliveryAddress" /></label>
           <label class="field"><span>Producto</span><select name="product" required></select></label>
           <label class="field"><span>Impresion</span><select name="printMethodId"></select></label>
+          <label class="field"><span>Impresiones por prenda</span><input name="printCount" type="number" min="1" step="1" /></label>
+          <label class="field"><span>Pasadas por impresion</span><input name="printPassCount" type="number" min="1" step="1" /></label>
           <label class="field"><span>Cantidad</span><input name="quantity" type="number" min="0" required /></label>
           <label class="field"><span>Origen</span><select name="source"><option value="taller">Taller</option><option value="fabrica">Fabrica</option></select></label>
           <label class="field"><span>Costo base unitario</span><input name="baseUnitCost" type="number" min="0" step="0.01" /></label>
@@ -882,6 +892,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabase-config.js"></script>
     <script src="./pricing-engine.js"></script>
-    <script src="./app.js?v=signum-ops-41"></script>
+    <script src="./app.js?v=signum-ops-42"></script>
   </body>
 </html>
