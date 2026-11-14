@@ -675,7 +675,10 @@ function setup() {
     const fields = $$(`#orderForm [name='${name}']`);
     fields.forEach((field) => field.addEventListener("input", () => { currentOrderItemSaved = false; }));
   });
-  $$("#orderForm input[name='requestType']").forEach((input) => input.addEventListener("change", updateLargeSalePanel));
+  $$("#orderForm input[name='requestType']").forEach((input) => input.addEventListener("change", () => {
+    renderProducts();
+    updateLargeSalePanel();
+  }));
   $("#productForm").addEventListener("submit", createProduct);
   $("#dynamicForm").addEventListener("submit", createDynamic);
   $("#discountScaleForm").addEventListener("submit", createDiscountScale);
@@ -871,7 +874,7 @@ function cleanProductCode(value) {
 function inferProductCategory(value = "") {
   const text = String(value).toLowerCase();
   if (text.includes("bols") || text.includes("friselina")) return "bolsa";
-  if (text.includes("remera") || text.includes("camiseta")) return "remera";
+  if (["remera", "camiseta", "musculosa", "chomba", "campera", "buzo", "pantal", "chaleco", "cuello polar", "indumentaria", "textil"].some((term) => text.includes(term))) return "remera";
   if (text.includes("gorra")) return "gorra";
   if (text.includes("lapic") || text.includes("boligraf")) return "lapicera";
   if (text.includes("taza") || text.includes("mug")) return "taza";
@@ -904,7 +907,7 @@ function inferPressUnitsPerPass(value = "") {
   return 1;
 }
 
-const categoryLabels = { bolsa: "Bolsas", remera: "Remeras", gorra: "Gorras", lapicera: "Lapiceras", taza: "Tazas", cuaderno: "Cuadernos", termo: "Termos", otro: "Otros" };
+const categoryLabels = { bolsa: "Bolsas", remera: "Textil", gorra: "Gorras", lapicera: "Lapiceras", taza: "Tazas", cuaderno: "Cuadernos", termo: "Termos", otro: "Otros" };
 
 function categoryIcon(category) {
   const paths = {
@@ -926,8 +929,10 @@ function isLightColor(color = "") {
 }
 
 function orderProducts() {
+  const quoteMode = $("#orderForm input[name='requestType'][value='presupuesto']")?.checked;
   return state.products.filter((product) => {
     if (!product.active) return false;
+    if (quoteMode) return true;
     return product.source === "fabrica" || inventoryFor(product.productCode).available > 0;
   });
 }
@@ -998,7 +1003,7 @@ function renderProducts() {
   const activeProducts = state.products.filter((product) => product.active);
   const selectable = orderProducts();
   const availableCategories = [...new Set(selectable.map((product) => product.category || inferProductCategory(product.name)))];
-  const requestedCategories = ["bolsa", "taza", "cuaderno", "lapicera", "termo"];
+  const requestedCategories = ["bolsa", "remera", "taza", "cuaderno", "lapicera", "termo"];
   const categories = [...new Set([...requestedCategories, ...availableCategories])];
   if (!availableCategories.includes(activeProductCategory)) activeProductCategory = availableCategories.includes("bolsa") ? "bolsa" : availableCategories[0] || "";
   $("#productCategoryGrid").innerHTML = categories.map((category) => `
@@ -1065,13 +1070,14 @@ function updateProductConfiguration(resetPrice = true) {
   const recommended = methods.find((method) => method.id === "sublimacion") || methods.find((method) => method.id === "dtf") || methods.find((method) => method.id === "grabado") || methods[0];
   $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(printMethodCostForProduct(method, product))}</option>`).join("");
   const factory = product?.source === "fabrica";
+  const quoteMode = form.querySelector('[name="requestType"][value="presupuesto"]')?.checked;
   const orderRadio = form.querySelector('[name="requestType"][value="pedido"]');
   if (factory) {
     orderRadio.disabled = true;
     form.querySelector('[name="requestType"][value="presupuesto"]').checked = true;
   } else {
     orderRadio.disabled = false;
-    orderRadio.checked = true;
+    if (!quoteMode) orderRadio.checked = true;
   }
   $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}</p>` : "";
   updateLargeSalePanel();
