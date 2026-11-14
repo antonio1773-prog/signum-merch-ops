@@ -1,4 +1,5 @@
 const storeKey = "signum-merch-ops-v3";
+const catalogVersion = "quilmtex-2026-04-13-v1";
 const today = new Date();
 const uid = () =>
   window.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -18,6 +19,42 @@ const defaultUsers = [
   { id: "logistica", name: "Logistica", username: "logistica", password: "1234", role: "logistica", active: true },
   { id: "direccion", name: "Direccion", username: "direccion", password: "admin", role: "direccion", active: true }
 ];
+
+const quilmtexRows = [
+  ["Remera niño talles 1, 2 y 4", 4000, 3800], ["Remera niño talles 6, 8, 10 y 12", 4400, 4200],
+  ["Remera corte clásico y entallado XS al XL", 4750, 4500], ["Remera talle XXL (64 cm sisa)", 5400, 5400],
+  ["Remera talle XXXL (66 cm sisa)", 6200, 5900], ["Remera talle XXXXL (75 cm sisa)", 6700, 6300],
+  ["Remera manga larga algodón XS al XL", 7200], ["Remera manga larga algodón XXL", 7600], ["Remera manga larga algodón XXXL", 8600],
+  ["Remera algodón peinado XS al XL", 7800, 7200], ["Remera algodón peinado XXL", 8900, 8200], ["Remera algodón peinado XXXL", 10100, 9400],
+  ["Musculosa algodón talle 12", 3800, 3500], ["Musculosa algodón XS al XL", 4050, 3800], ["Musculosa algodón XXL", 4900, 4600],
+  ["Chomba piqué XS al XL", 13800, 12400], ["Chomba piqué XXL", 14500, 13000], ["Chomba piqué XXXL y XXXXL", 15225, 13600],
+  ["Campera trucker con matelassé XS al XL", 26000], ["Campera trucker con matelassé XXL", 27300], ["Campera trucker con matelassé XXXL", 28600],
+  ["Campera trucker impermeable con matelassé XS al XL", 26000], ["Campera trucker impermeable con matelassé XXL", 27300], ["Campera trucker impermeable con matelassé XXXL", 28600],
+  ["Campera trucker flúor reflectiva XS al XL", 29800], ["Campera trucker flúor reflectiva XXL", 31300],
+  ["Campera tundra doble trucker XS al XL", 23000], ["Campera tundra doble trucker XXL", 24150], ["Campera tundra doble trucker XXXL", 25300],
+  ["Buzo canguro con capucha XS al XL", 13600, 12800], ["Buzo canguro con capucha XXL", 14300, 13400], ["Buzo canguro con capucha XXXL", 15000, 14100],
+  ["Buzo cuello redondo XS al XL", 10900, 10300], ["Buzo cuello redondo XXL", 11400, 10800], ["Buzo cuello redondo XXXL", 12000, 11300],
+  ["Buzo medio cierre XS al XL", 13600, 12800], ["Buzo medio cierre XXL", 14300, 13400], ["Buzo medio cierre XXXL", 15000, 14100],
+  ["Campera frisa invisible con capucha XS al XL", 23400], ["Campera frisa invisible con capucha XXL", 24600], ["Campera frisa invisible con capucha XXXL", 28600],
+  ["Campera rompeviento Siré XS al XL", 11850], ["Campera rompeviento Siré XXL", 12400],
+  ["Pantalón trabajo cargo 6 bolsillos talle 38 al 48", 25500], ["Pantalón trabajo cargo 6 bolsillos talle 50 y 52", 26800], ["Pantalón trabajo cargo 6 bolsillos talle 54 al 60", 28100],
+  ["Pantalón trabajo clásico talle 38 al 48", 21300], ["Pantalón trabajo clásico talle 50 y 52", 22400], ["Pantalón trabajo clásico talle 54 al 60", 23400],
+  ["Chaleco gabardina con polar XS al XL", 29500], ["Chaleco gabardina con polar XXL", 31000], ["Chaleco gabardina con polar XXXL", 32500],
+  ["Chaleco trucker con matelassé XS al XL", 15350], ["Chaleco trucker con matelassé XXL", 16100], ["Chaleco trucker con matelassé XXXL", 16900],
+  ["Chaleco trucker impermeable con matelassé XS al XL", 15350], ["Chaleco trucker impermeable con matelassé XXL", 16100], ["Chaleco trucker impermeable con matelassé XXXL", 16900],
+  ["Chaleco trucker flúor reflectivo gris XS al XL", 16650], ["Chaleco trucker flúor reflectivo gris XXL", 17500],
+  ["Cuello polar liso con cordón y tanca 23x28 cm", 1550]
+];
+
+const quilmtexCatalog = quilmtexRows.flatMap(([name, colorPrice, whitePrice], index) => {
+  const number = String(index + 1).padStart(3, "0");
+  const make = (suffix, color, price) => ({
+    id: `quilmtex-${number}-${suffix.toLowerCase()}`, productCode: `QTX-${number}-${suffix}`,
+    name: `${name} - ${color}`, category: "remera", variant: name, color, price,
+    minimum: 1, source: "taller", leadTime: 7, active: true, supplier: "QUILMTEX"
+  });
+  return whitePrice === undefined ? [make("C", "Color", colorPrice)] : [make("C", "Color", colorPrice), make("B", "Blanco", whitePrice)];
+});
 
 const seedState = {
   users: defaultUsers,
@@ -257,16 +294,17 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 function loadState() {
   const stored = localStorage.getItem(storeKey);
-  if (!stored) return structuredClone(seedState);
+  if (!stored) return normalizeState(structuredClone(seedState));
   try {
     return normalizeState(JSON.parse(stored));
   } catch {
-    return structuredClone(seedState);
+    return normalizeState(structuredClone(seedState));
   }
 }
 
 function normalizeState(rawState) {
   const parsed = rawState || {};
+  parsed.catalogVersion = catalogVersion;
   parsed.users ||= [];
   defaultUsers.forEach((defaultUser) => {
     if (!parsed.users.some((user) => user.id === defaultUser.id || user.username === defaultUser.username)) {
@@ -304,6 +342,11 @@ function normalizeState(rawState) {
     color: product.color || inferProductColor(product.name),
     pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
   }));
+  quilmtexCatalog.forEach((catalogProduct) => {
+    const existing = parsed.products.find((product) => cleanProductCode(product.productCode) === catalogProduct.productCode);
+    if (existing) Object.assign(existing, { ...catalogProduct, ...existing });
+    else parsed.products.push(structuredClone(catalogProduct));
+  });
   parsed.dynamics ||= structuredClone(seedState.dynamics);
   parsed.discountScales ||= [];
   parsed.discountScales = parsed.discountScales.map((scale) => ({ discountType: "scale", starts: iso(), ...scale }));
@@ -322,6 +365,16 @@ function normalizeState(rawState) {
     category: !item.category || item.category === "otro" ? inferProductCategory(item.productDescription) : item.category
   }));
   parsed.finance.pricing ||= [];
+  quilmtexCatalog.forEach((catalogProduct) => {
+    if (parsed.finance.pricing.some((pricing) => cleanProductCode(pricing.productCode) === catalogProduct.productCode)) return;
+    parsed.finance.pricing.push({
+      id: `pricing-${catalogProduct.id}`, productCode: catalogProduct.productCode, productName: catalogProduct.name,
+      description: "Costo de lista QUILMTEX 13/04/2026 - stock inicial cero", manualCost: catalogProduct.price,
+      purchaseCost: 0, subtotal: catalogProduct.price, ivaAmount: 0, total: catalogProduct.price,
+      productionCost: 0, sublimationSheet: 0, machineWear: 0, labor: 0, design: 0, electricity: 0,
+      seller1: 0, seller2: 0, iva: false, costsCustomized: true, createdAt: 1776038400000
+    });
+  });
   const purchaseGroups = new Map();
   parsed.finance.transactions
     .filter((item) => item.type === "compra" && item.productCode && Number(item.quantity || 0) > 0)
@@ -444,9 +497,14 @@ async function initializeRemoteState() {
     const { data, error } = await supabaseClient.from("app_state").select("data,updated_at").eq("id", remoteStateId).maybeSingle();
     if (error) throw error;
     if (data?.data) {
+      const needsCatalogMigration = data.data.catalogVersion !== catalogVersion;
       state = normalizeState(data.data);
       remoteUpdatedAt = data.updated_at || "";
       localStorage.setItem(storeKey, JSON.stringify(state));
+      if (needsCatalogMigration) {
+        remoteWritePending = true;
+        await saveRemoteState();
+      }
     } else {
       const { error: insertError } = await supabaseClient.from("app_state").insert({ id: remoteStateId, data: state });
       if (insertError) throw insertError;
