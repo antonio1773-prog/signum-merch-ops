@@ -1,5 +1,5 @@
 const storeKey = "signum-merch-ops-v3";
-const catalogVersion = "catalog-2026-11-v2";
+const catalogVersion = "catalog-2026-11-v3";
 const today = new Date();
 const uid = () =>
   window.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -72,7 +72,6 @@ const seedState = {
   ],
   products: [
     { id: uid(), productCode: "REM-001", name: "Remera premium bordada", category: "remera", variant: "Talle a definir", color: "Blanco", price: 14800, minimum: 25, source: "taller", leadTime: 6, active: true },
-    { id: uid(), productCode: "GOR-001", name: "Gorra trucker personalizada", category: "gorra", variant: "Trucker", color: "Negro", price: 9700, minimum: 50, source: "fabrica", leadTime: 10, active: true },
     { id: uid(), productCode: "KIT-001", name: "Kit bienvenida corporativo", category: "otro", variant: "Estandar", color: "", price: 42500, minimum: 20, source: "taller", leadTime: 8, active: true }
   ],
   dynamics: [
@@ -348,7 +347,7 @@ function normalizeState(rawState) {
     category: !product.category || product.category === "otro" ? inferProductCategory(product.name) : product.category,
     color: product.color || inferProductColor(product.name),
     pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
-  }));
+  })).filter((product) => !(cleanProductCode(product.productCode) === "GOR-001" && product.name === "Gorra trucker personalizada"));
   systemCatalog.forEach((catalogProduct) => {
     const existing = parsed.products.find((product) => cleanProductCode(product.productCode) === catalogProduct.productCode);
     if (existing) Object.assign(existing, { ...catalogProduct, ...existing });
