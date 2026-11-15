@@ -1575,7 +1575,7 @@ function productBaseCost(product) {
   const category = product.category || inferProductCategory(product.name);
   if (category === "taza") return rawCost / 0.67;
   if (category === "remera") return rawCost / 0.75;
-  if (category === "gorra") return rawCost / 0.5;
+  if (category === "gorra") return rawCost * 1.5;
   return rawCost;
 }
 
