@@ -81,9 +81,9 @@ const seedState = {
   ],
   discountScales: [],
   printMethods: [
-    { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera", "taza", "termo"], lightOnly: true, active: true },
+    { id: "sublimacion", name: "Sublimacion", unitCost: 710, breakdown: { material: 0, paperFilm: 92.26, ink: 93.85, adhesive: 25.11, printerWear: 45.52, pressWear: 41.43, labor: 320, design: 0, electricity: 10, other: 81.83 }, categories: ["bolsa", "remera", "gorra", "taza", "termo"], lightOnly: true, active: true },
     { id: "dtf", name: "DTF", unitCost: 650, breakdown: { material: 0, paperFilm: 200, ink: 120, adhesive: 50, printerWear: 80, pressWear: 0, labor: 150, design: 0, electricity: 20, other: 30 }, categories: ["bolsa", "remera", "gorra", "cuaderno", "termo"], lightOnly: false, active: true },
-    { id: "grabado", name: "Grabado / marcado", unitCost: 450, breakdown: { material: 40, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 120, pressWear: 0, labor: 220, design: 40, electricity: 20, other: 10 }, categories: ["bolsa", "lapicera", "cuaderno", "termo"], lightOnly: false, active: true },
+    { id: "grabado", name: "Grabado / marcado", unitCost: 450, breakdown: { material: 40, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 120, pressWear: 0, labor: 220, design: 40, electricity: 20, other: 10 }, categories: ["bolsa", "remera", "gorra", "lapicera", "cuaderno", "termo"], lightOnly: false, active: true },
     { id: "sin-impresion", name: "Sin impresion", unitCost: 0, breakdown: { material: 0, paperFilm: 0, ink: 0, adhesive: 0, printerWear: 0, pressWear: 0, labor: 0, design: 0, electricity: 0, other: 0 }, categories: ["bolsa", "remera", "gorra", "lapicera", "taza", "cuaderno", "termo", "otro"], lightOnly: false, active: true }
   ],
   quoteConfig: {
