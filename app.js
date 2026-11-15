@@ -1573,8 +1573,8 @@ function productBaseCost(product) {
   const pricing = product.source === "fabrica" ? null : latestPricingForCode(product.productCode);
   const rawCost = Number(pricing?.total || purchaseUnitCost(product.productCode) || product.price || 0);
   const category = product.category || inferProductCategory(product.name);
-  if (category === "taza") return rawCost / 0.67;
-  if (category === "remera") return rawCost / 0.75;
+  if (category === "taza") return rawCost * 1.33;
+  if (category === "remera") return rawCost * 1.25;
   if (category === "gorra") return rawCost * 1.5;
   return rawCost;
 }
@@ -2950,8 +2950,8 @@ function saveQuoteConfig(event) {
   Object.keys(state.quoteConfig.costs).forEach((key) => { state.quoteConfig.costs[key] = Number(data[key] || 0); });
   Object.keys(state.quoteConfig.policy).forEach((key) => { if (event.currentTarget.elements[key]) state.quoteConfig.policy[key] = Number(data[key] || 0); });
   const totalRate = state.quoteConfig.policy.taxRate + signumMarginRate() + state.quoteConfig.policy.targetMarginRate;
-  if (totalRate >= 100 || state.quoteConfig.policy.wasteRate >= 100) {
-    window.alert("Los porcentajes combinados deben ser menores a 100%.");
+  if (totalRate >= 100) {
+    window.alert("IVA, margen Signum y margen objetivo combinados deben ser menores a 100%.");
     return;
   }
   saveState();

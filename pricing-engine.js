@@ -23,7 +23,7 @@
       appliedCosts.paper + appliedCosts.ink + appliedCosts.tape + appliedCosts.labor +
       appliedCosts.printerDepreciation + appliedCosts.pressDepreciation;
     const wasteRate = number(config.policy.wasteRate) / 100;
-    const costWithWaste = subtotal / (1 - wasteRate);
+    const costWithWaste = subtotal * (1 + wasteRate);
     const wasteAmount = costWithWaste - subtotal;
     const unitCost = costWithWaste + appliedCosts.electricity;
     return {

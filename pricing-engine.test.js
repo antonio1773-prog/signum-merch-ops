@@ -8,16 +8,16 @@ const config = {
 const result = calculateQuote({ purchaseCost: 262.10 }, config, 100, "");
 
 assert.equal(result.subtotal, 880.27);
-assert.equal(result.costWithWaste, 907.49);
-assert.equal(result.unitCost, 917.49);
-assert.equal(result.technicalPrice, 1349.26);
+assert.equal(result.costWithWaste, 906.68);
+assert.equal(result.unitCost, 916.68);
+assert.equal(result.technicalPrice, 1348.06);
 assert.equal(result.suggestedPrice, 1350);
 assert.equal(result.saleTotal, 135000);
 assert.equal(result.commission, 0);
 
 const plain = calculateQuote({ purchaseCost: 262.10 }, config, 100, "", { includeProduction: false });
 assert.equal(plain.subtotal, 262.10);
-assert.equal(plain.unitCost, 270.21);
+assert.equal(plain.unitCost, 269.96);
 assert.equal(plain.appliedCosts.labor, 0);
 assert.equal(plain.appliedCosts.electricity, 0);
 assert.equal(plain.suggestedPrice, 400);
