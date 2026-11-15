@@ -1,5 +1,5 @@
 const storeKey = "signum-merch-ops-v3";
-const catalogVersion = "quilmtex-2026-04-13-v1";
+const catalogVersion = "catalog-2026-11-v2";
 const today = new Date();
 const uid = () =>
   window.crypto?.randomUUID?.() || `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -55,6 +55,13 @@ const quilmtexCatalog = quilmtexRows.flatMap(([name, colorPrice, whitePrice], in
   });
   return whitePrice === undefined ? [make("C", "Color", colorPrice)] : [make("C", "Color", colorPrice), make("B", "Blanco", whitePrice)];
 });
+
+const additionalCatalog = [{
+  id: "catalog-gorra-trucker", productCode: "GOR-TRUCKER", name: "Gorra trucker base",
+  category: "gorra", variant: "Trucker", color: "Color a definir", price: 3000,
+  minimum: 1, source: "taller", leadTime: 7, active: true, supplier: "A definir"
+}];
+const systemCatalog = [...quilmtexCatalog, ...additionalCatalog];
 
 const seedState = {
   users: defaultUsers,
@@ -342,7 +349,7 @@ function normalizeState(rawState) {
     color: product.color || inferProductColor(product.name),
     pressUnitsPerPass: Math.max(1, Number(product.pressUnitsPerPass || inferPressUnitsPerPass(`${product.name} ${product.variant || ""}`)))
   }));
-  quilmtexCatalog.forEach((catalogProduct) => {
+  systemCatalog.forEach((catalogProduct) => {
     const existing = parsed.products.find((product) => cleanProductCode(product.productCode) === catalogProduct.productCode);
     if (existing) Object.assign(existing, { ...catalogProduct, ...existing });
     else parsed.products.push(structuredClone(catalogProduct));
@@ -365,11 +372,11 @@ function normalizeState(rawState) {
     category: !item.category || item.category === "otro" ? inferProductCategory(item.productDescription) : item.category
   }));
   parsed.finance.pricing ||= [];
-  quilmtexCatalog.forEach((catalogProduct) => {
+  systemCatalog.forEach((catalogProduct) => {
     if (parsed.finance.pricing.some((pricing) => cleanProductCode(pricing.productCode) === catalogProduct.productCode)) return;
     parsed.finance.pricing.push({
       id: `pricing-${catalogProduct.id}`, productCode: catalogProduct.productCode, productName: catalogProduct.name,
-      description: "Costo de lista QUILMTEX 13/04/2026 - stock inicial cero", manualCost: catalogProduct.price,
+      description: catalogProduct.supplier === "QUILMTEX" ? "Costo de lista QUILMTEX 13/04/2026 - stock inicial cero" : "Costo inicial de catalogo - stock inicial cero", manualCost: catalogProduct.price,
       purchaseCost: 0, subtotal: catalogProduct.price, ivaAmount: 0, total: catalogProduct.price,
       productionCost: 0, sublimationSheet: 0, machineWear: 0, labor: 0, design: 0, electricity: 0,
       seller1: 0, seller2: 0, iva: false, costsCustomized: true, createdAt: 1776038400000
@@ -1083,6 +1090,7 @@ function updateProductConfiguration(resetPrice = true) {
   $("#printMethodSelect").innerHTML = methods.map((method) => `<option value="${method.id}" ${method.id === recommended?.id ? "selected" : ""}>${method.name} · ${money(printMethodCostForProduct(method, product))}</option>`).join("");
   const factory = product?.source === "fabrica";
   const isTextile = (product?.category || inferProductCategory(product?.name)) === "remera";
+  const isCap = (product?.category || inferProductCategory(product?.name)) === "gorra";
   $$("#orderForm .textile-print-field").forEach((field) => field.classList.toggle("is-hidden", !isTextile));
   const quoteMode = form.querySelector('[name="requestType"][value="presupuesto"]')?.checked;
   const orderRadio = form.querySelector('[name="requestType"][value="pedido"]');
@@ -1093,7 +1101,7 @@ function updateProductConfiguration(resetPrice = true) {
     orderRadio.disabled = false;
     if (!quoteMode) orderRadio.checked = true;
   }
-  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 25% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 125%." : ""}</p>` : "";
+  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 25% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 125%." : ""}${isCap ? " Gorras aplican 50% de merma y costo de impresión al 100%." : ""}</p>` : "";
   updateLargeSalePanel();
   updateSalePreview(resetPrice);
 }
@@ -1567,6 +1575,7 @@ function productBaseCost(product) {
   const category = product.category || inferProductCategory(product.name);
   if (category === "taza") return rawCost / 0.67;
   if (category === "remera") return rawCost / 0.75;
+  if (category === "gorra") return rawCost / 0.5;
   return rawCost;
 }
 
