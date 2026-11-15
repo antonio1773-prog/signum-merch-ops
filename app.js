@@ -962,9 +962,9 @@ function printMethodCostParts(method, product) {
   const category = product?.category || inferProductCategory(product?.name);
   const isBagProcess = method.id !== "sin-impresion" && category === "bolsa";
   const divisor = isBagProcess ? Math.max(1, Number(product?.pressUnitsPerPass || inferPressUnitsPerPass(`${product?.name || ""} ${product?.variant || ""}`))) : 1;
-  const textileMultiplier = category === "remera" && method.id !== "sin-impresion" ? 1.25 : 1;
-  const total = Number(method.unitCost || 0) * textileMultiplier / divisor;
-  const labor = Number(method.breakdown?.labor || 0) * textileMultiplier / divisor;
+  const categoryMultiplier = method.id === "sin-impresion" ? 1 : category === "remera" ? 1.25 : category === "gorra" ? 0.5 : 1;
+  const total = Number(method.unitCost || 0) * categoryMultiplier / divisor;
+  const labor = Number(method.breakdown?.labor || 0) * categoryMultiplier / divisor;
   return { labor, materials: Math.max(0, total - labor) };
 }
 
@@ -1101,7 +1101,7 @@ function updateProductConfiguration(resetPrice = true) {
     orderRadio.disabled = false;
     if (!quoteMode) orderRadio.checked = true;
   }
-  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 25% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 125%." : ""}${isCap ? " Gorras aplican 50% de merma y costo de impresión al 100%." : ""}</p>` : "";
+  $("#printRecommendation").innerHTML = product ? `<span class="badge ${factory ? "payment" : "neutral"}">${factory ? "Fabrica: solo presupuesto, sin reservar stock" : `Sugerido: ${recommended?.name || "Sin impresion"}`}</span><p>${product.color ? `Base ${product.color}. ` : ""}${recommended?.id === "sublimacion" ? "Apta para sublimacion por ser una base clara." : product.color && !isLightColor(product.color) ? "La sublimacion no esta disponible en bases oscuras." : "Tecnicas compatibles filtradas para este producto."}${isTextile ? " Textil aplica 25% de merma y cada impresión/pasada multiplica el costo de impresión calculado al 125%." : ""}${isCap ? " Gorras aplican 50% de merma y costo de impresión al 50%." : ""}</p>` : "";
   updateLargeSalePanel();
   updateSalePreview(resetPrice);
 }
